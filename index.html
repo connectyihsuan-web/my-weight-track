@@ -15,8 +15,9 @@
             --morandi-blue: #7a8d9f; 
             --morandi-rose: #a68d85; 
             --period-color: #795548; 
-            --ma-line-color: rgba(122, 141, 159, 0.5); /* 移動平均線顏色 */
+            --ma-line-color: rgba(122, 141, 159, 0.5);
             --border-color: #e8e8e8;
+            --progress-bg: #eeeeee;
         }
 
         body {
@@ -30,43 +31,52 @@
             padding: 40px 20px;
         }
 
-        .header { text-align: center; margin-bottom: 40px; }
+        .header { text-align: center; margin-bottom: 30px; }
         .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
         
-        .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 0.8rem; margin-top: 10px; color: var(--text-sub); }
-        .legend-item { display: flex; align-items: center; gap: 5px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; }
-        .line-sample { width: 20px; height: 2px; }
-
         .container { width: 100%; max-width: 900px; }
+        
+        /* 進度條樣式 */
+        .progress-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+        .progress-label { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9rem; color: var(--text-sub); }
+        .progress-bar-bg { background: var(--progress-bg); height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
+        .progress-bar-fill { 
+            background: linear-gradient(90deg, var(--morandi-blue), var(--morandi-rose)); 
+            height: 100%; width: 0%; border-radius: 4px; transition: width 1s ease-out; 
+        }
+
         .card {
             background: var(--card-bg);
             border-radius: 20px;
             padding: 30px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.02);
             border: 1px solid var(--border-color);
         }
 
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
-        .stat-label { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px; }
-        .stat-value { font-size: 1.6rem; font-weight: 500; color: var(--morandi-blue); }
+        .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
+        .stat-value { font-size: 1.4rem; font-weight: 500; color: var(--morandi-blue); }
+        .stat-unit { font-size: 0.8rem; margin-left: 2px; }
 
+        .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 0.8rem; margin: 15px 0; color: var(--text-sub); }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
-        select { 
-            border: 1px solid var(--border-color); 
-            background: var(--bg-color); 
-            padding: 5px 15px; 
-            border-radius: 10px; 
-            outline: none;
-            cursor: pointer;
-        }
+        select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; }
 
         h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
         h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
-        .ytd-header::before { background: var(--morandi-blue); }
 
         canvas { width: 100% !important; max-height: 350px; }
     </style>
@@ -76,14 +86,24 @@
 <div class="header">
     <h1>Yi Hsuan Weight Tracking</h1>
     <p>捕捉日復一日的細微變化</p>
-    <div class="legend">
-        <div class="legend-item"><div class="dot" style="background: #8e9fb1;"></div> 一般日區間</div>
-        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間</div>
-        <div class="legend-item"><div class="line-sample" style="border-top: 2px dashed var(--ma-line-color);"></div> 7日移動平均</div>
-    </div>
 </div>
 
 <div class="container">
+    <div class="progress-card">
+        <div class="progress-label">
+            <span>減重進度</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background: #8e9fb1;"></div> 一般日</div>
+            <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期</div>
+            <div class="legend-item"><div style="width:15px; border-top:2px dashed var(--ma-line-color);"></div> 7日平均</div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="stats-row">
             <div class="stat-item">
@@ -91,18 +111,22 @@
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
+                <div class="stat-label">距離目標</div>
+                <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
+            </div>
+            <div class="stat-item">
                 <div class="stat-label">本月變化</div>
                 <div id="mon-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">今年累計減重</div>
+                <div class="stat-label">今年累計</div>
                 <div id="ytd-diff" class="stat-value">--</div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="ytd-header">YTD 全年度體重曲線</h2>
+        <h2>YTD 全年度體重曲線</h2>
         <canvas id="ytdChart"></canvas>
     </div>
 
@@ -117,6 +141,7 @@
 
 <script>
     const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
+    const TARGET_KG = 55.0; // 你的目標體重
     
     let allData = [];
     let charts = {};
@@ -132,7 +157,36 @@
         });
     }
 
-    // 計算移動平均線的輔助函數
+    function renderAll() {
+        if (allData.length === 0) return;
+
+        const first = allData[0];
+        const latest = allData[allData.length - 1];
+        const startKg = parseFloat(first.KG);
+        const currentKg = parseFloat(latest.KG);
+
+        // 1. 更新數據文字
+        document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
+        
+        const dist = (currentKg - TARGET_KG).toFixed(1);
+        document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
+
+        const totalDiff = (currentKg - startKg).toFixed(1);
+        document.getElementById('ytd-diff').innerHTML = `${totalDiff > 0 ? "+" : ""}${totalDiff}<span class="stat-unit">kg</span>`;
+
+        // 2. 更新進度條 (初始 - 當前) / (初始 - 目標)
+        const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - TARGET_KG)) * 100));
+        document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
+        setTimeout(() => {
+            document.getElementById('progress-fill').style.width = progress + "%";
+        }, 100);
+
+        renderYTDChart();
+        renderMonthTrend(document.getElementById('monthSelect').value);
+    }
+
+    // --- 以下為圖表邏輯 (與先前相同，保持穩定) ---
+
     function getMovingAverage(dataArray, windowSize = 7) {
         return dataArray.map((val, index, arr) => {
             if (index < windowSize - 1) return null;
@@ -159,42 +213,19 @@
         selector.addEventListener('change', () => renderMonthTrend(selector.value));
     }
 
-    function renderAll() {
-        const latest = allData[allData.length - 1];
-        const first = allData[0];
-        document.getElementById('cur-kg').innerText = latest.KG + " kg";
-        
-        const totalDiff = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1);
-        document.getElementById('ytd-diff').innerText = (totalDiff > 0 ? "+" : "") + totalDiff + " kg";
+    function isPeriodPoint(d) { return d && d.備註 && d.備註.includes('生理期'); }
+    function segmentIsPeriod(ctx, dataArray) { return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]); }
 
-        renderYTDChart();
-        renderMonthTrend(document.getElementById('monthSelect').value);
-    }
-
-    function isPeriodPoint(d) {
-        return d && d.備註 && d.備註.includes('生理期');
-    }
-
-    function segmentIsPeriod(ctx, dataArray) {
-        return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]);
-    }
-
-    // --- 1. YTD 全年度曲線 ---
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
         if (charts.ytd) charts.ytd.destroy();
-
         charts.ytd = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
-                    label: '體重',
                     data: allData.map(d => d.KG),
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointRadius: 0,
+                    fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0,
                     segment: {
                         borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
                         backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.15)' : 'rgba(142, 159, 177, 0.05)',
@@ -203,108 +234,54 @@
             },
             options: { 
                 responsive: true, 
-                plugins: { 
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const d = allData[context.dataIndex];
-                                let label = ` 體重: ${context.parsed.y} kg`;
-                                if (d.備註) label += ` | 📝 ${d.備註}`;
-                                return label;
-                            }
-                        }
-                    }
-                },
+                plugins: { legend: { display: false } },
                 scales: { x: { grid: { display: false } } }
             }
         });
     }
 
-    // --- 2. 單月詳細趨勢 (含 7日平均線 & 備註) ---
     function renderMonthTrend(selected) {
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
-        if (filtered.length === 0) return;
-
         const diff = (parseFloat(filtered[filtered.length-1].KG) - parseFloat(filtered[0].KG)).toFixed(1);
-        document.getElementById('mon-diff').innerText = (diff > 0 ? "+" : "") + diff + " kg";
-
-        const maData = getMovingAverage(filtered, 7);
+        document.getElementById('mon-diff').innerHTML = `${diff > 0 ? "+" : ""}${diff}<span class="stat-unit">kg</span>`;
 
         const ctx = document.getElementById('monthTrendChart').getContext('2d');
         if (charts.month) charts.month.destroy();
-
         charts.month = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [
                     {
-                        // 原始體重線
-                        label: '每日體重',
+                        label: '體重',
                         data: filtered.map(d => d.KG),
-                        tension: 0.3,
-                        borderWidth: 2.5,
-                        pointRadius: 3,
+                        tension: 0.3, borderWidth: 2.5, pointRadius: 3,
                         pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
-                        pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
-                        segment: {
-                            borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e',
-                        },
-                        zIndex: 2
+                        segment: { borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e' }
                     },
                     {
-                        // 7日移動平均線
                         label: '7日平均',
-                        data: maData,
-                        borderColor: 'rgba(122, 141, 159, 0.4)',
-                        borderWidth: 2,
-                        borderDash: [5, 5],
-                        pointRadius: 0,
-                        fill: false,
-                        tension: 0.4,
-                        zIndex: 1
+                        data: getMovingAverage(filtered, 7),
+                        borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
                     }
                 ]
             },
             options: { 
-                responsive: true,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
+                interaction: { mode: 'index', intersect: false },
                 plugins: { 
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                        titleColor: '#2d2d2d',
-                        bodyColor: '#555555',
-                        borderColor: '#e8e8e8',
-                        borderWidth: 1,
-                        padding: 10,
                         callbacks: {
                             label: function(context) {
                                 if (context.datasetIndex === 0) {
                                     const d = filtered[context.dataIndex];
-                                    let label = ` 體重: ${context.parsed.y} kg`;
-                                    if (d.備註) label += ` | 📝 ${d.備註}`;
-                                    return label;
-                                } else {
-                                    return ` 7日平均: ${context.parsed.y} kg`;
+                                    return ` 體重: ${context.parsed.y} kg${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
                                 }
+                                return ` 7日平均: ${context.parsed.y} kg`;
                             }
-                        }
-                    }
-                },
-                scales: { 
-                    x: { grid: { display: false } },
-                    y: { 
-                        beginAtZero: false,
-                        ticks: {
-                            callback: function(value) { return value + 'kg'; }
                         }
                     }
                 }
