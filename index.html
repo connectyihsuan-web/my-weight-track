@@ -3,52 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的體重追蹤紀錄</title>
+    <title>我的體重即時監控</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        body { font-family: sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 90%; max-width: 800px; }
-        h1 { color: #333; }
-        .stats { margin-bottom: 20px; font-size: 1.1em; color: #555; }
+        body { font-family: -apple-system, sans-serif; background: #fdfdfd; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 95%; max-width: 850px; border: 1px solid #eee; }
+        h1 { margin-bottom: 10px; font-size: 1.5rem; color: #2c3e50; }
+        .status-box { margin-bottom: 25px; padding: 15px; background: #f8f9fa; border-radius: 10px; font-size: 0.95rem; line-height: 1.6; }
+        .highlight { color: #3498db; font-weight: bold; font-size: 1.2rem; }
+        canvas { max-height: 400px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>體重趨勢圖</h1>
-        <div class="stats" id="current-info">載入中...</div>
+        <h1>體重即時追蹤看板</h1>
+        <div class="status-box" id="status">數據讀取中...</div>
         <canvas id="weightChart"></canvas>
     </div>
 
-    <script src="data.js"></script>
     <script>
-        const ctx = document.getElementById('weightChart').getContext('2d');
-        
-        // 取得最新的體重資訊
-        const latest = weightData[weightData.length - 1];
-        document.getElementById('current-info').innerHTML = 
-            `最後更新日期：${latest.date} | 當前體重：<strong>${latest.kg} kg</strong>`;
+        // 你的專屬 Google 試算表連結
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
 
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: weightData.map(d => d.date),
-                datasets: [{
-                    label: '體重 (kg)',
-                    data: weightData.map(d => d.kg),
-                    borderColor: '#42a5f5',
-                    backgroundColor: 'rgba(66, 165, 245, 0.2)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: false, title: { display: true, text: '公斤 (kg)' } }
+        function init() {
+            Papa.parse(sheetUrl, {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    // 過濾掉沒有 KG 資料的行數（比如未來日期還沒填的部分）
+                    const rawData = results.data;
+                    const cleanData = rawData.filter(row => row.KG && row.KG.trim() !== "" && !isNaN(parseFloat(row.KG)));
+                    
+                    if (cleanData.length > 0) {
+                        updateDashboard(cleanData);
+                    } else {
+                        document.getElementById('status').innerText = "尚未在試算表中發現有效體重數據";
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        function updateDashboard(data) {
+            const latest = data[data.length - 1];
+            const first = data[0];
+            const diff = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1);
+            
+            // 更新狀態文字
+            document.getElementById('status').innerHTML = `
+                📅 最後紀錄日期：${latest.DATE} <br>
+                ⚖️ 當前體重：<span class="highlight">${latest.KG} kg</span> <br>
+                📉 總體變化：${diff > 0 ? '+' : ''}${diff} kg
+            `;
+
+            // 繪製圖表
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.DATE),
+                    datasets: [{
+                        label: '體重趨勢 (kg)',
+                        data: data.map(d => d.KG),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.05)',
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#3498db',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: { 
+                            beginAtZero: false,
+                            grid: { color: '#f0f0f0' },
+                            title: { display: true, text: 'KG' }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        init();
     </script>
 </body>
 </html>
