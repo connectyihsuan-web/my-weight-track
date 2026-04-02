@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yi Hsuan｜體重紀錄板</title>
+    <title>Yi Hsuan｜體重紀錄看板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
@@ -12,9 +12,9 @@
             --card-bg: #ffffff;
             --text-main: #5d5d5d;
             --text-sub: #a0a0a0;
-            --morandi-blue: #8e9fb1; /* YTD 主色 */
-            --morandi-rose: #bda69e; /* 月圖主色 */
-            --period-color: #b09b8d; /* 生理期配色：莫蘭迪暖棕灰色 */
+            --morandi-blue: #8e9fb1; 
+            --morandi-rose: #bda69e; 
+            --period-color: #9e827a; /* 加深生理期顏色：莫蘭迪可可棕 */
             --border-color: #f0f0f0;
         }
 
@@ -72,10 +72,10 @@
 
 <div class="header">
     <h1>Weight Tracking</h1>
-    <p>優雅地紀錄每一天的變化</p>
+    <p>捕捉日復一日的細微變化</p>
     <div class="legend">
         <div class="legend-item"><div class="dot" style="background: var(--text-sub);"></div> 一般日區間</div>
-        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間</div>
+        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間 </div>
     </div>
 </div>
 
@@ -98,7 +98,7 @@
     </div>
 
     <div class="card">
-        <h2 class="ytd-header">YTD 全年度體重曲線 (含生理期填滿)</h2>
+        <h2 class="ytd-header">YTD 全年度體重曲線</h2>
         <canvas id="ytdChart"></canvas>
     </div>
 
@@ -106,7 +106,7 @@
         <div class="controls">
             <select id="monthSelect"></select>
         </div>
-        <h2>單月詳細趨勢 </h2>
+        <h2>單月詳細趨勢</h2>
         <canvas id="monthTrendChart"></canvas>
     </div>
 </div>
@@ -155,18 +155,16 @@
         renderMonthTrend(document.getElementById('monthSelect').value);
     }
 
-    // 輔助函數：判斷單點是否包含生理期備註
     function isPeriodPoint(d) {
         return d && d.備註 && d.備註.includes('生理期');
     }
 
-    // 輔助函數：定義 Chart.js Segment 邏輯
-    // 如果線段的起點(p0)或終點(p1)任意一方標記為生理期，則將該線段定義為生理期區間。
     function segmentIsPeriod(ctx, dataArray) {
+        // 如果起點或終點有生理期標記，該線段就變色
         return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]);
     }
 
-    // --- 1. YTD 全年度曲線 ---
+    // --- 1. YTD 全年度曲線 (移除點點) ---
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
         if (charts.ytd) charts.ytd.destroy();
@@ -177,18 +175,13 @@
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
                     data: allData.map(d => d.KG),
-                    fill: true, // 啟用填滿
+                    fill: true,
                     tension: 0.4,
                     borderWidth: 2,
-                    pointRadius: allData.map(d => isPeriodPoint(d) ? 2 : 0), // 平常隱藏圓點，生理期極小棕點標記
-                    pointBackgroundColor: '#b09b8d',
-                    
-                    // 【關鍵變動 1】定義線段樣式
+                    pointRadius: 0, // 【修正】完全移除點點
                     segment: {
-                        // 線條顏色：生理期棕色，一般日藍色
-                        borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#b09b8d' : '#8e9fb1',
-                        // 填滿顏色：生理期棕色填滿，一般日藍色填滿
-                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(176, 155, 141, 0.2)' : 'rgba(142, 159, 177, 0.1)',
+                        borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
+                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.25)' : 'rgba(142, 159, 177, 0.1)',
                     }
                 }]
             },
@@ -200,7 +193,7 @@
         });
     }
 
-    // --- 2. 單月詳細趨勢 ---
+    // --- 2. 單月詳細趨勢 (縮小點點，加強色差) ---
     function renderMonthTrend(selected) {
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
@@ -217,20 +210,16 @@
             data: {
                 labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
-                    label: '體重',
                     data: filtered.map(d => d.KG),
                     fill: false,
                     tension: 0.3,
-                    borderWidth: 3,
-                    
-                    // 【關鍵變動 2】圓點顏色同步
-                    pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#b09b8d' : '#bda69e'),
-                    pointRadius: 4, // 縮小圓點至正常大小
-                    pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#b09b8d' : '#bda69e'),
-                    
-                    // 【關鍵變動 3】定義線段顏色同步
+                    borderWidth: 2.5,
+                    pointRadius: 2.5, // 【修正】點點縮小
+                    pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
+                    pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
                     segment: {
-                        borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#b09b8d' : '#bda69e',
+                        borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e',
+                        borderWidth: ctx => segmentIsPeriod(ctx, filtered) ? 2.5 : 2.5, // 【修正】生理期線段加粗
                     }
                 }]
             },
