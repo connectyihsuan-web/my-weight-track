@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的體重追蹤紀錄</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 90%; max-width: 800px; }
+        h1 { color: #333; }
+        .stats { margin-bottom: 20px; font-size: 1.1em; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>體重趨勢圖</h1>
+        <div class="stats" id="current-info">載入中...</div>
+        <canvas id="weightChart"></canvas>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+        const ctx = document.getElementById('weightChart').getContext('2d');
+        
+        // 取得最新的體重資訊
+        const latest = weightData[weightData.length - 1];
+        document.getElementById('current-info').innerHTML = 
+            `最後更新日期：${latest.date} | 當前體重：<strong>${latest.kg} kg</strong>`;
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: weightData.map(d => d.date),
+                datasets: [{
+                    label: '體重 (kg)',
+                    data: weightData.map(d => d.kg),
+                    borderColor: '#42a5f5',
+                    backgroundColor: 'rgba(66, 165, 245, 0.2)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: false, title: { display: true, text: '公斤 (kg)' } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
