@@ -3,96 +3,184 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Weight Track</title>
+    <title>體重深度分析看板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #fdfdfd; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
-        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 95%; max-width: 850px; border: 1px solid #eee; }
-        h1 { margin-bottom: 10px; font-size: 1.5rem; color: #2c3e50; }
-        .status-box { margin-bottom: 25px; padding: 15px; background: #f8f9fa; border-radius: 10px; font-size: 0.95rem; line-height: 1.6; }
-        .highlight { color: #3498db; font-weight: bold; font-size: 1.2rem; }
-        canvas { max-height: 400px; }
+        body { font-family: -apple-system, sans-serif; background: #f4f7f9; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 95%; max-width: 850px; }
+        .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        select { padding: 8px 15px; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem; outline: none; }
+        .chart-box { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+        h2 { font-size: 1.2rem; color: #444; margin-bottom: 15px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; color: #3498db; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>體重即時追蹤看板</h1>
-        <div class="status-box" id="status">數據讀取中...</div>
-        <canvas id="weightChart"></canvas>
+
+<div class="container">
+    <h1>體重追蹤分析</h1>
+
+    <div class="controls">
+        <label for="monthSelect">選擇查看月份：</label>
+        <select id="monthSelect"></select>
     </div>
 
-    <script>
-        // 你的專屬 Google 試算表連結
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div>當前體重</div>
+            <div id="currentWeight" class="stat-value">--</div>
+        </div>
+        <div class="stat-card">
+            <div>本月變化</div>
+            <div id="monthlyDiff" class="stat-value">--</div>
+        </div>
+    </div>
 
-        function init() {
-            Papa.parse(sheetUrl, {
-                download: true,
-                header: true,
-                complete: function(results) {
-                    // 過濾掉沒有 KG 資料的行數（比如未來日期還沒填的部分）
-                    const rawData = results.data;
-                    const cleanData = rawData.filter(row => row.KG && row.KG.trim() !== "" && !isNaN(parseFloat(row.KG)));
-                    
-                    if (cleanData.length > 0) {
-                        updateDashboard(cleanData);
-                    } else {
-                        document.getElementById('status').innerText = "尚未在試算表中發現有效體重數據";
-                    }
-                }
+    <div class="chart-box">
+        <h2>體重趨勢 (kg)</h2>
+        <canvas id="trendChart"></canvas>
+    </div>
+
+    <div class="chart-box">
+        <h2>每月減重幅度 (kg)</h2>
+        <canvas id="changeChart"></canvas>
+    </div>
+</div>
+
+<script>
+    const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
+    
+    let allData = [];
+    let trendChart, changeChart;
+
+    function init() {
+        Papa.parse(sheetUrl, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                allData = results.data.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
+                setupMonthSelector();
+                updateCharts();
+            }
+        });
+    }
+
+    function setupMonthSelector() {
+        const selector = document.getElementById('monthSelect');
+        const months = ["全部", "1-2月"];
+        // 取得所有月份 (3-12月)
+        const availableMonths = [...new Set(allData.map(d => {
+            const m = parseInt(d.DATE.split('-')[1]);
+            return m > 2 ? m + "月" : null;
+        }))].filter(m => m !== null).sort((a, b) => parseInt(a) - parseInt(b));
+        
+        [...months, ...availableMonths].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.innerText = m;
+            selector.appendChild(opt);
+        });
+
+        selector.addEventListener('change', updateCharts);
+        selector.value = "1-2月"; // 預設顯示最新的月份
+    }
+
+    function updateCharts() {
+        const selected = document.getElementById('monthSelect').value;
+        let filtered = [];
+
+        if (selected === "全部") {
+            filtered = allData;
+        } else if (selected === "1-2月") {
+            filtered = allData.filter(d => {
+                const m = parseInt(d.DATE.split('-')[1]);
+                return m === 1 || m === 2;
             });
+        } else {
+            const targetMonth = parseInt(selected);
+            filtered = allData.filter(d => parseInt(d.DATE.split('-')[1]) === targetMonth);
         }
 
-        function updateDashboard(data) {
-            const latest = data[data.length - 1];
-            const first = data[0];
-            const diff = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1);
-            
-            // 更新狀態文字
-            document.getElementById('status').innerHTML = `
-                📅 最後紀錄日期：${latest.DATE} <br>
-                ⚖️ 當前體重：<span class="highlight">${latest.KG} kg</span> <br>
-                📉 總體變化：${diff > 0 ? '+' : ''}${diff} kg
-            `;
-
-            // 繪製圖表
-            const ctx = document.getElementById('weightChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.map(d => d.DATE),
-                    datasets: [{
-                        label: '體重趨勢 (kg)',
-                        data: data.map(d => d.KG),
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.05)',
-                        borderWidth: 3,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#3498db',
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    scales: {
-                        y: { 
-                            beginAtZero: false,
-                            grid: { color: '#f0f0f0' },
-                            title: { display: true, text: 'KG' }
-                        },
-                        x: { grid: { display: false } }
-                    },
-                    plugins: {
-                        legend: { display: false }
-                    }
-                }
-            });
+        // 1. 更新數值顯示
+        if (filtered.length > 0) {
+            const last = filtered[filtered.length - 1];
+            const first = filtered[0];
+            const diff = (parseFloat(last.KG) - parseFloat(first.KG)).toFixed(1);
+            document.getElementById('currentWeight').innerText = last.KG + " kg";
+            document.getElementById('monthlyDiff').innerText = (diff > 0 ? "+" : "") + diff + " kg";
         }
 
-        init();
-    </script>
+        // 2. 趨勢圖 (不含年份)
+        renderTrendChart(filtered);
+
+        // 3. 每月變化圖
+        renderMonthlyChangeChart();
+    }
+
+    function renderTrendChart(data) {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        if (trendChart) trendChart.destroy();
+
+        // 處理標籤：將 2026-04-02 變為 04-02
+        const labels = data.map(d => d.DATE.split('-').slice(1).join('-'));
+
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '公斤',
+                    data: data.map(d => d.KG),
+                    borderColor: '#3498db',
+                    tension: 0.3,
+                    fill: false
+                }]
+            },
+            options: { responsive: true }
+        });
+    }
+
+    function renderMonthlyChangeChart() {
+        const ctx = document.getElementById('changeChart').getContext('2d');
+        if (changeChart) changeChart.destroy();
+
+        // 計算每個月的頭尾差距
+        const monthlyGroups = {};
+        allData.forEach(d => {
+            const m = parseInt(d.DATE.split('-')[1]);
+            const key = (m === 1 || m === 2) ? "1-2月" : m + "月";
+            if (!monthlyGroups[key]) monthlyGroups[key] = [];
+            monthlyGroups[key].push(parseFloat(d.KG));
+        });
+
+        const labels = Object.keys(monthlyGroups);
+        const diffs = labels.map(key => {
+            const group = monthlyGroups[key];
+            return (group[group.length - 1] - group[0]).toFixed(1);
+        });
+
+        changeChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '體重增減 (kg)',
+                    data: diffs,
+                    backgroundColor: diffs.map(v => v <= 0 ? '#2ecc71' : '#e74c3c')
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    init();
+</script>
+
 </body>
 </html>
