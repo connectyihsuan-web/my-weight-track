@@ -10,11 +10,12 @@
         :root {
             --bg-color: #faf9f6;
             --card-bg: #ffffff;
-            --text-main: #2d2d2d; /* 加深：主要文字 */
-            --text-sub: #555555;  /* 加深：次要文字與標籤 */
-            --morandi-blue: #7a8d9f; /* 莫蘭迪深藍 */
-            --morandi-rose: #a68d85; /* 莫蘭迪深粉 */
-            --period-color: #795548; /* 強化：深可可棕生理期色 */
+            --text-main: #2d2d2d; 
+            --text-sub: #555555;  
+            --morandi-blue: #7a8d9f; 
+            --morandi-rose: #a68d85; 
+            --period-color: #795548; 
+            --ma-line-color: rgba(122, 141, 159, 0.5); /* 移動平均線顏色 */
             --border-color: #e8e8e8;
         }
 
@@ -32,9 +33,10 @@
         .header { text-align: center; margin-bottom: 40px; }
         .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
         
-        .legend { display: flex; justify-content: center; gap: 20px; font-size: 0.8rem; margin-top: 10px; color: var(--text-sub); }
+        .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 0.8rem; margin-top: 10px; color: var(--text-sub); }
         .legend-item { display: flex; align-items: center; gap: 5px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .line-sample { width: 20px; height: 2px; }
 
         .container { width: 100%; max-width: 900px; }
         .card {
@@ -59,6 +61,7 @@
             padding: 5px 15px; 
             border-radius: 10px; 
             outline: none;
+            cursor: pointer;
         }
 
         h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
@@ -74,8 +77,9 @@
     <h1>Yi Hsuan Weight Tracking</h1>
     <p>捕捉日復一日的細微變化</p>
     <div class="legend">
-        <div class="legend-item"><div class="dot" style="background: var(--text-sub);"></div> 一般日區間</div>
-        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間 </div>
+        <div class="legend-item"><div class="dot" style="background: #8e9fb1;"></div> 一般日區間</div>
+        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間</div>
+        <div class="legend-item"><div class="line-sample" style="border-top: 2px dashed var(--ma-line-color);"></div> 7日移動平均</div>
     </div>
 </div>
 
@@ -128,6 +132,16 @@
         });
     }
 
+    // 計算移動平均線的輔助函數
+    function getMovingAverage(dataArray, windowSize = 7) {
+        return dataArray.map((val, index, arr) => {
+            if (index < windowSize - 1) return null;
+            const slice = arr.slice(index - windowSize + 1, index + 1);
+            const sum = slice.reduce((acc, curr) => acc + parseFloat(curr.KG), 0);
+            return (sum / windowSize).toFixed(2);
+        });
+    }
+
     function setupMonthSelector() {
         const selector = document.getElementById('monthSelect');
         const months = ["1-2月"];
@@ -149,7 +163,9 @@
         const latest = allData[allData.length - 1];
         const first = allData[0];
         document.getElementById('cur-kg').innerText = latest.KG + " kg";
-        document.getElementById('ytd-diff').innerText = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1) + " kg";
+        
+        const totalDiff = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1);
+        document.getElementById('ytd-diff').innerText = (totalDiff > 0 ? "+" : "") + totalDiff + " kg";
 
         renderYTDChart();
         renderMonthTrend(document.getElementById('monthSelect').value);
@@ -160,11 +176,10 @@
     }
 
     function segmentIsPeriod(ctx, dataArray) {
-        // 如果起點或終點有生理期標記，該線段就變色
         return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]);
     }
 
-    // --- 1. YTD 全年度曲線 (移除點點) ---
+    // --- 1. YTD 全年度曲線 ---
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
         if (charts.ytd) charts.ytd.destroy();
@@ -174,33 +189,50 @@
             data: {
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
+                    label: '體重',
                     data: allData.map(d => d.KG),
                     fill: true,
                     tension: 0.4,
                     borderWidth: 2,
-                    pointRadius: 0, // 【修正】完全移除點點
+                    pointRadius: 0,
                     segment: {
                         borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
-                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.25)' : 'rgba(142, 159, 177, 0.1)',
+                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.15)' : 'rgba(142, 159, 177, 0.05)',
                     }
                 }]
             },
             options: { 
                 responsive: true, 
-                plugins: { legend: { display: false } },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const d = allData[context.dataIndex];
+                                let label = ` 體重: ${context.parsed.y} kg`;
+                                if (d.備註) label += ` | 📝 ${d.備註}`;
+                                return label;
+                            }
+                        }
+                    }
+                },
                 scales: { x: { grid: { display: false } } }
             }
         });
     }
 
-    // --- 2. 單月詳細趨勢 (縮小點點，加強色差) ---
+    // --- 2. 單月詳細趨勢 (含 7日平均線 & 備註) ---
     function renderMonthTrend(selected) {
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
+        if (filtered.length === 0) return;
+
         const diff = (parseFloat(filtered[filtered.length-1].KG) - parseFloat(filtered[0].KG)).toFixed(1);
         document.getElementById('mon-diff').innerText = (diff > 0 ? "+" : "") + diff + " kg";
+
+        const maData = getMovingAverage(filtered, 7);
 
         const ctx = document.getElementById('monthTrendChart').getContext('2d');
         if (charts.month) charts.month.destroy();
@@ -209,24 +241,73 @@
             type: 'line',
             data: {
                 labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
-                datasets: [{
-                    data: filtered.map(d => d.KG),
-                    fill: false,
-                    tension: 0.3,
-                    borderWidth: 2.5,
-                    pointRadius: 2.5, // 【修正】點點縮小
-                    pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
-                    pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
-                    segment: {
-                        borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e',
-                        borderWidth: ctx => segmentIsPeriod(ctx, filtered) ? 2.5 : 2.5, // 【修正】生理期線段加粗
+                datasets: [
+                    {
+                        // 原始體重線
+                        label: '每日體重',
+                        data: filtered.map(d => d.KG),
+                        tension: 0.3,
+                        borderWidth: 2.5,
+                        pointRadius: 3,
+                        pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
+                        pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
+                        segment: {
+                            borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e',
+                        },
+                        zIndex: 2
+                    },
+                    {
+                        // 7日移動平均線
+                        label: '7日平均',
+                        data: maData,
+                        borderColor: 'rgba(122, 141, 159, 0.4)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.4,
+                        zIndex: 1
                     }
-                }]
+                ]
             },
             options: { 
                 responsive: true,
-                plugins: { legend: { display: false } },
-                scales: { x: { grid: { display: false } } }
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#2d2d2d',
+                        bodyColor: '#555555',
+                        borderColor: '#e8e8e8',
+                        borderWidth: 1,
+                        padding: 10,
+                        callbacks: {
+                            label: function(context) {
+                                if (context.datasetIndex === 0) {
+                                    const d = filtered[context.dataIndex];
+                                    let label = ` 體重: ${context.parsed.y} kg`;
+                                    if (d.備註) label += ` | 📝 ${d.備註}`;
+                                    return label;
+                                } else {
+                                    return ` 7日平均: ${context.parsed.y} kg`;
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: { 
+                    x: { grid: { display: false } },
+                    y: { 
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(value) { return value + 'kg'; }
+                        }
+                    }
+                }
             }
         });
     }
