@@ -7,15 +7,15 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        /* 北歐莫蘭迪風格 CSS */
         :root {
-            --bg-color: #faf9f6; /* 米灰色背景 */
+            --bg-color: #faf9f6;
             --card-bg: #ffffff;
             --text-main: #5d5d5d;
             --text-sub: #a0a0a0;
-            --morandi-blue: #8e9fb1; /* 莫蘭迪藍 */
-            --morandi-green: #a4b494; /* 莫蘭迪綠 */
-            --morandi-rose: #bda69e; /* 豆沙粉 */
+            --morandi-blue: #8e9fb1;
+            --morandi-green: #a4b494;
+            --morandi-rose: #bda69e;
+            --period-color: #d4a373; /* 生理期專屬：暖橘調 */
             --border-color: #f0f0f0;
         }
 
@@ -32,10 +32,12 @@
 
         .header { text-align: center; margin-bottom: 40px; }
         .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
-        .header p { color: var(--text-sub); font-size: 0.9rem; }
+        
+        .legend { display: flex; justify-content: center; gap: 20px; font-size: 0.8rem; margin-top: 10px; color: var(--text-sub); }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
 
         .container { width: 100%; max-width: 900px; }
-
         .card {
             background: var(--card-bg);
             border-radius: 20px;
@@ -57,7 +59,6 @@
             background: var(--bg-color); 
             padding: 5px 15px; 
             border-radius: 10px; 
-            color: var(--text-main);
             outline: none;
         }
 
@@ -72,6 +73,10 @@
 <div class="header">
     <h1>Weight Tracking</h1>
     <p>優雅地紀錄每一天的變化</p>
+    <div class="legend">
+        <div class="legend-item"><div class="dot" style="background: var(--morandi-rose);"></div> 一般日</div>
+        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期</div>
+    </div>
 </div>
 
 <div class="container">
@@ -82,7 +87,7 @@
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">本月目標進度</div>
+                <div class="stat-label">本月變化</div>
                 <div id="mon-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
@@ -121,6 +126,7 @@
         Papa.parse(sheetUrl, {
             download: true, header: true,
             complete: function(results) {
+                // 讀取 CSV 時，確保抓到「備註」欄位
                 allData = results.data.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
                 setupMonthSelector();
                 renderAll();
@@ -146,7 +152,6 @@
     }
 
     function renderAll() {
-        // 更新上方數值
         const latest = allData[allData.length - 1];
         const first = allData[0];
         document.getElementById('cur-kg').innerText = latest.KG + " kg";
@@ -157,7 +162,15 @@
         renderMonthlyChangeChart();
     }
 
-    // 1. YTD 全年度曲線
+    // 取得點點顏色的邏輯
+    function getPointColor(d) {
+        return (d.備註 && d.備註.includes('生理期')) ? '#d4a373' : '#bda69e';
+    }
+    // 取得點點大小的邏輯
+    function getPointSize(d) {
+        return (d.備註 && d.備註.includes('生理期')) ? 7 : 3;
+    }
+
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
         new Chart(ctx, {
@@ -165,18 +178,18 @@
             data: {
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
-                    label: '體重 (kg)',
                     data: allData.map(d => d.KG),
                     borderColor: '#8e9fb1',
                     backgroundColor: 'rgba(142, 159, 177, 0.1)',
-                    fill: true, tension: 0.4, pointRadius: 0
+                    fill: true, tension: 0.4, 
+                    pointRadius: allData.map(d => (d.備註 && d.備註.includes('生理期')) ? 4 : 0),
+                    pointBackgroundColor: allData.map(d => getPointColor(d))
                 }]
             },
             options: { responsive: true, plugins: { legend: { display: false } } }
         });
     }
 
-    // 2. 單月詳細趨勢
     function renderMonthTrend(selected) {
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
@@ -195,14 +208,19 @@
                     label: '體重',
                     data: filtered.map(d => d.KG),
                     borderColor: '#bda69e',
-                    borderWidth: 3, tension: 0.3, fill: false
+                    borderWidth: 2, tension: 0.3, fill: false,
+                    pointBackgroundColor: filtered.map(d => getPointColor(d)),
+                    pointRadius: filtered.map(d => getPointSize(d)),
+                    pointBorderColor: filtered.map(d => getPointColor(d))
                 }]
             },
-            options: { responsive: true }
+            options: { 
+                responsive: true,
+                plugins: { legend: { display: false } }
+            }
         });
     }
 
-    // 3. 每月總減重公斤數趨勢 (曲線圖)
     function renderMonthlyChangeChart() {
         const groups = {};
         allData.forEach(d => {
@@ -217,7 +235,7 @@
 
         const ctx = document.getElementById('monthlyChangeChart').getContext('2d');
         new Chart(ctx, {
-            type: 'line', // 改為曲線圖
+            type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
@@ -225,15 +243,10 @@
                     data: data,
                     borderColor: '#a4b494',
                     backgroundColor: 'rgba(164, 180, 148, 0.2)',
-                    fill: true, tension: 0.4, borderWidth: 3, pointRadius: 5
+                    fill: true, tension: 0.4, borderWidth: 3, pointRadius: 5, pointBackgroundColor: '#a4b494'
                 }]
             },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { reverse: false, title: { display: true, text: '公斤變化' } }
-                }
-            }
+            options: { responsive: true, plugins: { legend: { display: false } } }
         });
     }
 
