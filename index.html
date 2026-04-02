@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>北歐生活｜體重紀錄看板</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Yi Hsuan｜體重紀錄板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
         :root {
@@ -12,10 +12,9 @@
             --card-bg: #ffffff;
             --text-main: #5d5d5d;
             --text-sub: #a0a0a0;
-            --morandi-blue: #8e9fb1;
-            --morandi-green: #a4b494;
-            --morandi-rose: #bda69e;
-            --period-color: #d4a373; /* 生理期專屬：暖橘調 */
+            --morandi-blue: #8e9fb1; /* YTD 主色 */
+            --morandi-rose: #bda69e; /* 月圖主色 */
+            --period-color: #b09b8d; /* 生理期配色：莫蘭迪暖棕灰色 */
             --border-color: #f0f0f0;
         }
 
@@ -62,8 +61,9 @@
             outline: none;
         }
 
-        h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--morandi-rose); display: flex; align-items: center; }
+        h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
         h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
+        .ytd-header::before { background: var(--morandi-blue); }
 
         canvas { width: 100% !important; max-height: 350px; }
     </style>
@@ -74,8 +74,8 @@
     <h1>Weight Tracking</h1>
     <p>優雅地紀錄每一天的變化</p>
     <div class="legend">
-        <div class="legend-item"><div class="dot" style="background: var(--morandi-rose);"></div> 一般日</div>
-        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期</div>
+        <div class="legend-item"><div class="dot" style="background: var(--text-sub);"></div> 一般日區間</div>
+        <div class="legend-item"><div class="dot" style="background: var(--period-color);"></div> 生理期區間</div>
     </div>
 </div>
 
@@ -98,7 +98,7 @@
     </div>
 
     <div class="card">
-        <h2>YTD 全年度體重曲線</h2>
+        <h2 class="ytd-header">YTD 全年度體重曲線 (含生理期填滿)</h2>
         <canvas id="ytdChart"></canvas>
     </div>
 
@@ -106,13 +106,8 @@
         <div class="controls">
             <select id="monthSelect"></select>
         </div>
-        <h2>單月詳細趨勢</h2>
+        <h2>單月詳細趨勢 (含生理期線段)</h2>
         <canvas id="monthTrendChart"></canvas>
-    </div>
-
-    <div class="card">
-        <h2>每月減重成效 (公斤趨勢)</h2>
-        <canvas id="monthlyChangeChart"></canvas>
     </div>
 </div>
 
@@ -126,7 +121,6 @@
         Papa.parse(sheetUrl, {
             download: true, header: true,
             complete: function(results) {
-                // 讀取 CSV 時，確保抓到「備註」欄位
                 allData = results.data.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
                 setupMonthSelector();
                 renderAll();
@@ -159,37 +153,54 @@
 
         renderYTDChart();
         renderMonthTrend(document.getElementById('monthSelect').value);
-        renderMonthlyChangeChart();
     }
 
-    // 取得點點顏色的邏輯
-    function getPointColor(d) {
-        return (d.備註 && d.備註.includes('生理期')) ? '#d4a373' : '#bda69e';
-    }
-    // 取得點點大小的邏輯
-    function getPointSize(d) {
-        return (d.備註 && d.備註.includes('生理期')) ? 7 : 3;
+    // 輔助函數：判斷單點是否包含生理期備註
+    function isPeriodPoint(d) {
+        return d && d.備註 && d.備註.includes('生理期');
     }
 
+    // 輔助函數：定義 Chart.js Segment 邏輯
+    // 如果線段的起點(p0)或終點(p1)任意一方標記為生理期，則將該線段定義為生理期區間。
+    function segmentIsPeriod(ctx, dataArray) {
+        return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]);
+    }
+
+    // --- 1. YTD 全年度曲線 ---
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
-        new Chart(ctx, {
+        if (charts.ytd) charts.ytd.destroy();
+
+        charts.ytd = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
                     data: allData.map(d => d.KG),
-                    borderColor: '#8e9fb1',
-                    backgroundColor: 'rgba(142, 159, 177, 0.1)',
-                    fill: true, tension: 0.4, 
-                    pointRadius: allData.map(d => (d.備註 && d.備註.includes('生理期')) ? 4 : 0),
-                    pointBackgroundColor: allData.map(d => getPointColor(d))
+                    fill: true, // 啟用填滿
+                    tension: 0.4,
+                    borderWidth: 2,
+                    pointRadius: allData.map(d => isPeriodPoint(d) ? 2 : 0), // 平常隱藏圓點，生理期極小棕點標記
+                    pointBackgroundColor: '#b09b8d',
+                    
+                    // 【關鍵變動 1】定義線段樣式
+                    segment: {
+                        // 線條顏色：生理期棕色，一般日藍色
+                        borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#b09b8d' : '#8e9fb1',
+                        // 填滿顏色：生理期棕色填滿，一般日藍色填滿
+                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(176, 155, 141, 0.2)' : 'rgba(142, 159, 177, 0.1)',
+                    }
                 }]
             },
-            options: { responsive: true, plugins: { legend: { display: false } } }
+            options: { 
+                responsive: true, 
+                plugins: { legend: { display: false } },
+                scales: { x: { grid: { display: false } } }
+            }
         });
     }
 
+    // --- 2. 單月詳細趨勢 ---
     function renderMonthTrend(selected) {
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
@@ -200,6 +211,7 @@
 
         const ctx = document.getElementById('monthTrendChart').getContext('2d');
         if (charts.month) charts.month.destroy();
+
         charts.month = new Chart(ctx, {
             type: 'line',
             data: {
@@ -207,46 +219,26 @@
                 datasets: [{
                     label: '體重',
                     data: filtered.map(d => d.KG),
-                    borderColor: '#bda69e',
-                    borderWidth: 2, tension: 0.3, fill: false,
-                    pointBackgroundColor: filtered.map(d => getPointColor(d)),
-                    pointRadius: filtered.map(d => getPointSize(d)),
-                    pointBorderColor: filtered.map(d => getPointColor(d))
+                    fill: false,
+                    tension: 0.3,
+                    borderWidth: 3,
+                    
+                    // 【關鍵變動 2】圓點顏色同步
+                    pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#b09b8d' : '#bda69e'),
+                    pointRadius: 4, // 縮小圓點至正常大小
+                    pointBorderColor: filtered.map(d => isPeriodPoint(d) ? '#b09b8d' : '#bda69e'),
+                    
+                    // 【關鍵變動 3】定義線段顏色同步
+                    segment: {
+                        borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#b09b8d' : '#bda69e',
+                    }
                 }]
             },
             options: { 
                 responsive: true,
-                plugins: { legend: { display: false } }
+                plugins: { legend: { display: false } },
+                scales: { x: { grid: { display: false } } }
             }
-        });
-    }
-
-    function renderMonthlyChangeChart() {
-        const groups = {};
-        allData.forEach(d => {
-            const m = parseInt(d.DATE.split('-')[1]);
-            const key = (m <= 2) ? "1-2月" : m + "月";
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(parseFloat(d.KG));
-        });
-
-        const labels = Object.keys(groups);
-        const data = labels.map(key => (groups[key][groups[key].length-1] - groups[key][0]).toFixed(1));
-
-        const ctx = document.getElementById('monthlyChangeChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: '月減重 (kg)',
-                    data: data,
-                    borderColor: '#a4b494',
-                    backgroundColor: 'rgba(164, 180, 148, 0.2)',
-                    fill: true, tension: 0.4, borderWidth: 3, pointRadius: 5, pointBackgroundColor: '#a4b494'
-                }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } } }
         });
     }
 
