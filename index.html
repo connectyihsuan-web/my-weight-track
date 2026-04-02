@@ -3,50 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體重深度分析看板</title>
+    <title>北歐生活｜體重紀錄看板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #f4f7f9; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
-        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 95%; max-width: 850px; }
-        .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-        select { padding: 8px 15px; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem; outline: none; }
-        .chart-box { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
-        h2 { font-size: 1.2rem; color: #444; margin-bottom: 15px; }
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center; }
-        .stat-value { font-size: 1.5rem; font-weight: bold; color: #3498db; }
+        /* 北歐莫蘭迪風格 CSS */
+        :root {
+            --bg-color: #faf9f6; /* 米灰色背景 */
+            --card-bg: #ffffff;
+            --text-main: #5d5d5d;
+            --text-sub: #a0a0a0;
+            --morandi-blue: #8e9fb1; /* 莫蘭迪藍 */
+            --morandi-green: #a4b494; /* 莫蘭迪綠 */
+            --morandi-rose: #bda69e; /* 豆沙粉 */
+            --border-color: #f0f0f0;
+        }
+
+        body {
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .header { text-align: center; margin-bottom: 40px; }
+        .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
+        .header p { color: var(--text-sub); font-size: 0.9rem; }
+
+        .container { width: 100%; max-width: 900px; }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+        }
+
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
+        .stat-item:last-child { border-right: none; }
+        .stat-label { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px; }
+        .stat-value { font-size: 1.6rem; font-weight: 500; color: var(--morandi-blue); }
+
+        .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
+        select { 
+            border: 1px solid var(--border-color); 
+            background: var(--bg-color); 
+            padding: 5px 15px; 
+            border-radius: 10px; 
+            color: var(--text-main);
+            outline: none;
+        }
+
+        h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--morandi-rose); display: flex; align-items: center; }
+        h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
+
+        canvas { width: 100% !important; max-height: 350px; }
     </style>
 </head>
 <body>
 
+<div class="header">
+    <h1>Weight Tracking</h1>
+    <p>優雅地紀錄每一天的變化</p>
+</div>
+
 <div class="container">
-    <h1>體重追蹤分析</h1>
-
-    <div class="controls">
-        <label for="monthSelect">選擇查看月份：</label>
-        <select id="monthSelect"></select>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div>當前體重</div>
-            <div id="currentWeight" class="stat-value">--</div>
+    <div class="card">
+        <div class="stats-row">
+            <div class="stat-item">
+                <div class="stat-label">當前體重</div>
+                <div id="cur-kg" class="stat-value">--</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">本月目標進度</div>
+                <div id="mon-diff" class="stat-value">--</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">今年累計減重</div>
+                <div id="ytd-diff" class="stat-value">--</div>
+            </div>
         </div>
-        <div class="stat-card">
-            <div>本月變化</div>
-            <div id="monthlyDiff" class="stat-value">--</div>
+    </div>
+
+    <div class="card">
+        <h2>YTD 全年度體重曲線</h2>
+        <canvas id="ytdChart"></canvas>
+    </div>
+
+    <div class="card">
+        <div class="controls">
+            <select id="monthSelect"></select>
         </div>
+        <h2>單月詳細趨勢</h2>
+        <canvas id="monthTrendChart"></canvas>
     </div>
 
-    <div class="chart-box">
-        <h2>體重趨勢 (kg)</h2>
-        <canvas id="trendChart"></canvas>
-    </div>
-
-    <div class="chart-box">
-        <h2>每月減重幅度 (kg)</h2>
-        <canvas id="changeChart"></canvas>
+    <div class="card">
+        <h2>每月減重成效 (公斤趨勢)</h2>
+        <canvas id="monthlyChangeChart"></canvas>
     </div>
 </div>
 
@@ -54,133 +115,129 @@
     const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
     
     let allData = [];
-    let trendChart, changeChart;
+    let charts = {};
 
     function init() {
         Papa.parse(sheetUrl, {
-            download: true,
-            header: true,
+            download: true, header: true,
             complete: function(results) {
                 allData = results.data.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
                 setupMonthSelector();
-                updateCharts();
+                renderAll();
             }
         });
     }
 
     function setupMonthSelector() {
         const selector = document.getElementById('monthSelect');
-        const months = ["全部", "1-2月"];
-        // 取得所有月份 (3-12月)
-        const availableMonths = [...new Set(allData.map(d => {
+        const months = ["1-2月"];
+        const others = [...new Set(allData.map(d => {
             const m = parseInt(d.DATE.split('-')[1]);
             return m > 2 ? m + "月" : null;
-        }))].filter(m => m !== null).sort((a, b) => parseInt(a) - parseInt(b));
+        }))].filter(m => m !== null).sort((a,b) => parseInt(a)-parseInt(b));
         
-        [...months, ...availableMonths].forEach(m => {
+        [...months, ...others].forEach(m => {
             const opt = document.createElement('option');
-            opt.value = m;
-            opt.innerText = m;
+            opt.value = m; opt.innerText = m;
             selector.appendChild(opt);
         });
-
-        selector.addEventListener('change', updateCharts);
-        selector.value = "1-2月"; // 預設顯示最新的月份
+        selector.value = others.length > 0 ? others[others.length-1] : "1-2月";
+        selector.addEventListener('change', () => renderMonthTrend(selector.value));
     }
 
-    function updateCharts() {
-        const selected = document.getElementById('monthSelect').value;
-        let filtered = [];
+    function renderAll() {
+        // 更新上方數值
+        const latest = allData[allData.length - 1];
+        const first = allData[0];
+        document.getElementById('cur-kg').innerText = latest.KG + " kg";
+        document.getElementById('ytd-diff').innerText = (parseFloat(latest.KG) - parseFloat(first.KG)).toFixed(1) + " kg";
 
-        if (selected === "全部") {
-            filtered = allData;
-        } else if (selected === "1-2月") {
-            filtered = allData.filter(d => {
-                const m = parseInt(d.DATE.split('-')[1]);
-                return m === 1 || m === 2;
-            });
-        } else {
-            const targetMonth = parseInt(selected);
-            filtered = allData.filter(d => parseInt(d.DATE.split('-')[1]) === targetMonth);
-        }
-
-        // 1. 更新數值顯示
-        if (filtered.length > 0) {
-            const last = filtered[filtered.length - 1];
-            const first = filtered[0];
-            const diff = (parseFloat(last.KG) - parseFloat(first.KG)).toFixed(1);
-            document.getElementById('currentWeight').innerText = last.KG + " kg";
-            document.getElementById('monthlyDiff').innerText = (diff > 0 ? "+" : "") + diff + " kg";
-        }
-
-        // 2. 趨勢圖 (不含年份)
-        renderTrendChart(filtered);
-
-        // 3. 每月變化圖
+        renderYTDChart();
+        renderMonthTrend(document.getElementById('monthSelect').value);
         renderMonthlyChangeChart();
     }
 
-    function renderTrendChart(data) {
-        const ctx = document.getElementById('trendChart').getContext('2d');
-        if (trendChart) trendChart.destroy();
-
-        // 處理標籤：將 2026-04-02 變為 04-02
-        const labels = data.map(d => d.DATE.split('-').slice(1).join('-'));
-
-        trendChart = new Chart(ctx, {
+    // 1. YTD 全年度曲線
+    function renderYTDChart() {
+        const ctx = document.getElementById('ytdChart').getContext('2d');
+        new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
-                    label: '公斤',
-                    data: data.map(d => d.KG),
-                    borderColor: '#3498db',
-                    tension: 0.3,
-                    fill: false
+                    label: '體重 (kg)',
+                    data: allData.map(d => d.KG),
+                    borderColor: '#8e9fb1',
+                    backgroundColor: 'rgba(142, 159, 177, 0.1)',
+                    fill: true, tension: 0.4, pointRadius: 0
+                }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+    }
+
+    // 2. 單月詳細趨勢
+    function renderMonthTrend(selected) {
+        let filtered = (selected === "1-2月") 
+            ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
+            : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
+
+        const diff = (parseFloat(filtered[filtered.length-1].KG) - parseFloat(filtered[0].KG)).toFixed(1);
+        document.getElementById('mon-diff').innerText = (diff > 0 ? "+" : "") + diff + " kg";
+
+        const ctx = document.getElementById('monthTrendChart').getContext('2d');
+        if (charts.month) charts.month.destroy();
+        charts.month = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
+                datasets: [{
+                    label: '體重',
+                    data: filtered.map(d => d.KG),
+                    borderColor: '#bda69e',
+                    borderWidth: 3, tension: 0.3, fill: false
                 }]
             },
             options: { responsive: true }
         });
     }
 
+    // 3. 每月總減重公斤數趨勢 (曲線圖)
     function renderMonthlyChangeChart() {
-        const ctx = document.getElementById('changeChart').getContext('2d');
-        if (changeChart) changeChart.destroy();
-
-        // 計算每個月的頭尾差距
-        const monthlyGroups = {};
+        const groups = {};
         allData.forEach(d => {
             const m = parseInt(d.DATE.split('-')[1]);
-            const key = (m === 1 || m === 2) ? "1-2月" : m + "月";
-            if (!monthlyGroups[key]) monthlyGroups[key] = [];
-            monthlyGroups[key].push(parseFloat(d.KG));
+            const key = (m <= 2) ? "1-2月" : m + "月";
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(parseFloat(d.KG));
         });
 
-        const labels = Object.keys(monthlyGroups);
-        const diffs = labels.map(key => {
-            const group = monthlyGroups[key];
-            return (group[group.length - 1] - group[0]).toFixed(1);
-        });
+        const labels = Object.keys(groups);
+        const data = labels.map(key => (groups[key][groups[key].length-1] - groups[key][0]).toFixed(1));
 
-        changeChart = new Chart(ctx, {
-            type: 'bar',
+        const ctx = document.getElementById('monthlyChangeChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line', // 改為曲線圖
             data: {
                 labels: labels,
                 datasets: [{
-                    label: '體重增減 (kg)',
-                    data: diffs,
-                    backgroundColor: diffs.map(v => v <= 0 ? '#2ecc71' : '#e74c3c')
+                    label: '月減重 (kg)',
+                    data: data,
+                    borderColor: '#a4b494',
+                    backgroundColor: 'rgba(164, 180, 148, 0.2)',
+                    fill: true, tension: 0.4, borderWidth: 3, pointRadius: 5
                 }]
             },
             options: {
                 responsive: true,
-                plugins: { legend: { display: false } }
+                scales: {
+                    y: { reverse: false, title: { display: true, text: '公斤變化' } }
+                }
             }
         });
     }
 
     init();
 </script>
-
 </body>
 </html>
