@@ -129,7 +129,7 @@
 
 <script>
     const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
-    const FINAL_TARGET = 55.0; // 最終目標
+    const FINAL_TARGET = 55.0; 
     
     let allData = [];
     let charts = {};
@@ -139,14 +139,22 @@
         if (month === 4) return 57.0;
         if (month === 5) return 56.0;
         if (month >= 6) return 55.0;
-        return 58.0; // 預設
+        return 58.0; 
     }
 
     function init() {
         Papa.parse(sheetUrl, {
             download: true, header: true,
             complete: function(results) {
+                // 過濾無效資料
                 allData = results.data.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
+                
+                // 【核心修正點 1】：先計算全年度的 7 日平均，存入資料物件中
+                const ma7Values = getMovingAverage(allData, 7);
+                allData.forEach((d, i) => {
+                    d.ma7 = ma7Values[i];
+                });
+
                 setupMonthSelector();
                 renderAll();
             }
@@ -165,26 +173,21 @@
         const prevKg = parseFloat(prev.KG);
         const monthlyTarget = getMonthlyTarget();
 
-        // 1. 當前體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
         dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "#7a9f8d" : "var(--morandi-blue)");
 
-        // 3. 距離本月目標
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 4. 今年累計
         const totalDiff = (currentKg - startKg).toFixed(1);
         document.getElementById('ytd-diff').innerHTML = `${totalDiff > 0 ? "+" : ""}${totalDiff}<span class="stat-unit">kg</span>`;
 
-        // 5. 進度條 (相對於 55kg 最終目標)
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
@@ -195,6 +198,7 @@
         renderMonthTrend(document.getElementById('monthSelect').value);
     }
 
+    // 計算移動平均的工具函式
     function getMovingAverage(dataArray, windowSize = 7) {
         return dataArray.map((val, index, arr) => {
             if (index < windowSize - 1) return null;
@@ -252,6 +256,7 @@
     }
 
     function renderMonthTrend(selected) {
+        // 【核心修正點 2】：篩選出月份資料，此時資料物件中已經帶有 ma7 屬性
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
@@ -272,7 +277,8 @@
                     },
                     {
                         label: '7日平均',
-                        data: getMovingAverage(filtered, 7),
+                        // 【核心修正點 3】：直接使用資料物件中的 ma7，不會因為月份剛開始而斷掉
+                        data: filtered.map(d => d.ma7),
                         borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
                     }
                 ]
