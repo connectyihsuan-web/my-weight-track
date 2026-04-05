@@ -14,8 +14,6 @@
             --text-sub: #555555;  
             --morandi-blue: #7a8d9f; 
             --morandi-rose: #a68d85; 
-            --period-color: #795548; 
-            --ma-line-color: rgba(122, 141, 159, 0.5);
             --border-color: #e8e8e8;
             --progress-bg: #eeeeee;
         }
@@ -36,7 +34,6 @@
         
         .container { width: 100%; max-width: 900px; }
         
-        /* 進度條樣式 */
         .progress-card {
             background: var(--card-bg);
             border-radius: 20px;
@@ -61,24 +58,20 @@
             border: 1px solid var(--border-color);
         }
 
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
-        .stat-value { font-size: 1.4rem; font-weight: 500; color: var(--morandi-blue); }
-        .stat-unit { font-size: 0.8rem; margin-left: 2px; }
+        .stat-value { font-size: 1.3rem; font-weight: 500; color: var(--morandi-blue); }
+        .stat-unit { font-size: 0.75rem; margin-left: 2px; }
 
-        .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 0.8rem; margin: 15px 0; color: var(--text-sub); }
-        .legend-item { display: flex; align-items: center; gap: 5px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; }
-        
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
         select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; }
 
         h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
         h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
 
-        canvas { width: 100% !important; max-height: 350px; }
+        canvas { width: 100% !important; max-height: 320px; }
     </style>
 </head>
 <body>
@@ -91,14 +84,11 @@
 <div class="container">
     <div class="progress-card">
         <div class="progress-label">
-            <span>減重進度</span>
+            <span>總減重進度 (至 55kg)</span>
             <span id="progress-percent">0%</span>
         </div>
         <div class="progress-bar-bg">
             <div id="progress-fill" class="progress-bar-fill"></div>
-        </div>
-        <div class="legend">
-
         </div>
     </div>
 
@@ -109,12 +99,12 @@
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">距離目標</div>
-                <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
+                <div class="stat-label">今日變化</div>
+                <div id="day-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">本月變化</div>
-                <div id="mon-diff" class="stat-value">--</div>
+                <div id="target-label" class="stat-label">本月目標距離</div>
+                <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
             </div>
             <div class="stat-item">
                 <div class="stat-label">今年累計</div>
@@ -139,10 +129,18 @@
 
 <script>
     const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
-    const TARGET_KG = 55.0; // 你的目標體重
+    const FINAL_TARGET = 55.0; // 最終目標
     
     let allData = [];
     let charts = {};
+
+    function getMonthlyTarget() {
+        const month = new Date().getMonth() + 1;
+        if (month === 4) return 57.0;
+        if (month === 5) return 56.0;
+        if (month >= 6) return 55.0;
+        return 58.0; // 預設
+    }
 
     function init() {
         Papa.parse(sheetUrl, {
@@ -160,20 +158,34 @@
 
         const first = allData[0];
         const latest = allData[allData.length - 1];
+        const prev = allData.length > 1 ? allData[allData.length - 2] : latest;
+        
         const startKg = parseFloat(first.KG);
         const currentKg = parseFloat(latest.KG);
+        const prevKg = parseFloat(prev.KG);
+        const monthlyTarget = getMonthlyTarget();
 
-        // 1. 更新數據文字
+        // 1. 當前體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        const dist = (currentKg - TARGET_KG).toFixed(1);
+        // 2. 今日變化
+        const dayDiff = (currentKg - prevKg).toFixed(1);
+        const dayDiffElem = document.getElementById('day-diff');
+        const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
+        dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
+        dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "#7a9f8d" : "var(--morandi-blue)");
+
+        // 3. 距離本月目標
+        const dist = (currentKg - monthlyTarget).toFixed(1);
+        document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
+        // 4. 今年累計
         const totalDiff = (currentKg - startKg).toFixed(1);
         document.getElementById('ytd-diff').innerHTML = `${totalDiff > 0 ? "+" : ""}${totalDiff}<span class="stat-unit">kg</span>`;
 
-        // 2. 更新進度條 (初始 - 當前) / (初始 - 目標)
-        const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - TARGET_KG)) * 100));
+        // 5. 進度條 (相對於 55kg 最終目標)
+        const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
             document.getElementById('progress-fill').style.width = progress + "%";
@@ -182,8 +194,6 @@
         renderYTDChart();
         renderMonthTrend(document.getElementById('monthSelect').value);
     }
-
-    // --- 以下為圖表邏輯 (與先前相同，保持穩定) ---
 
     function getMovingAverage(dataArray, windowSize = 7) {
         return dataArray.map((val, index, arr) => {
@@ -231,9 +241,12 @@
                 }]
             },
             options: { 
-                responsive: true, 
+                responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
-                scales: { x: { grid: { display: false } } }
+                scales: { 
+                    y: { beginAtZero: false, ticks: { font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } } 
+                }
             }
         });
     }
@@ -242,9 +255,6 @@
         let filtered = (selected === "1-2月") 
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
-
-        const diff = (parseFloat(filtered[filtered.length-1].KG) - parseFloat(filtered[0].KG)).toFixed(1);
-        document.getElementById('mon-diff').innerHTML = `${diff > 0 ? "+" : ""}${diff}<span class="stat-unit">kg</span>`;
 
         const ctx = document.getElementById('monthTrendChart').getContext('2d');
         if (charts.month) charts.month.destroy();
@@ -268,6 +278,7 @@
                 ]
             },
             options: { 
+                responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: { 
                     legend: { display: false },
@@ -282,7 +293,8 @@
                             }
                         }
                     }
-                }
+                },
+                scales: { y: { beginAtZero: false } }
             }
         });
     }
