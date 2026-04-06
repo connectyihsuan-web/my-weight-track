@@ -86,7 +86,7 @@
 <div class="container">
     <div class="progress-card">
         <div class="progress-label">
-            <span>總減重進度 (至 55kg)</span>
+            <span>減重進度 </span>
             <span id="progress-percent">0%</span>
         </div>
         <div class="progress-bar-bg">
@@ -97,7 +97,7 @@
     <div class="card">
         <div class="stats-row">
             <div class="stat-item">
-                <div class="stat-label">當前體重</div>
+                <div class="stat-label">今日體重</div>
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
@@ -105,11 +105,11 @@
                 <div id="day-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div id="target-label" class="stat-label">4月目標距離</div>
+                <div id="target-label" class="stat-label">4 月目標距離</div>
                 <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">預計達標 (55kg)</div>
+                <div class="stat-label">預計達標 </div>
                 <div id="predict-date" class="stat-value" style="color: var(--morandi-green);">--</div>
                 <div id="days-left" class="stat-subtext">--</div>
             </div>
@@ -117,7 +117,7 @@
     </div>
 
     <div class="card">
-        <h2>YTD 全年度體重曲線</h2>
+        <h2>YTD 年度體重曲線</h2>
         <canvas id="ytdChart"></canvas>
     </div>
 
@@ -125,7 +125,7 @@
         <div class="controls">
             <select id="monthSelect"></select>
         </div>
-        <h2>單月詳細趨勢</h2>
+        <h2>單月趨勢</h2>
         <canvas id="monthTrendChart"></canvas>
     </div>
 </div>
@@ -188,7 +188,7 @@
         const prevKg = parseFloat(prev.KG);
         const monthlyTarget = getMonthlyTarget();
 
-        // 1. 當前體重
+        // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
         // 2. 今日變化
