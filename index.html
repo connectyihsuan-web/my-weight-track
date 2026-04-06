@@ -14,6 +14,7 @@
             --text-sub: #555555;  
             --morandi-blue: #7a8d9f; 
             --morandi-rose: #a68d85; 
+            --morandi-green: #7a9f8d;
             --border-color: #e8e8e8;
             --progress-bg: #eeeeee;
         }
@@ -64,6 +65,7 @@
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
         .stat-value { font-size: 1.3rem; font-weight: 500; color: var(--morandi-blue); }
         .stat-unit { font-size: 0.75rem; margin-left: 2px; }
+        .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; }
 
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
         select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; }
@@ -103,12 +105,13 @@
                 <div id="day-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div id="target-label" class="stat-label">本月目標距離</div>
+                <div id="target-label" class="stat-label">4月目標距離</div>
                 <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">今年累計</div>
-                <div id="ytd-diff" class="stat-value">--</div>
+                <div class="stat-label">預計達標 (55kg)</div>
+                <div id="predict-date" class="stat-value" style="color: var(--morandi-green);">--</div>
+                <div id="days-left" class="stat-subtext">--</div>
             </div>
         </div>
     </div>
@@ -128,21 +131,18 @@
 </div>
 
 <script>
-    // 資料連結
     const weightUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
     const targetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?gid=2139827519&single=true&output=csv';
     
     const FINAL_TARGET = 55.0; 
     let allData = [];
-    let monthlyTargets = []; // 存放從 Sheets 讀取的目標
+    let monthlyTargets = [];
     let charts = {};
 
-    // 封裝 Papa.parse 成 Promise
     function parseCsv(url) {
         return new Promise((resolve, reject) => {
             Papa.parse(url, {
-                download: true,
-                header: true,
+                download: true, header: true,
                 complete: (results) => resolve(results.data),
                 error: (error) => reject(error)
             });
@@ -151,33 +151,25 @@
 
     async function init() {
         try {
-            // 同時抓取兩份資料
             const [weightRaw, targetRaw] = await Promise.all([
                 parseCsv(weightUrl),
                 parseCsv(targetUrl)
             ]);
 
-            // 處理體重資料
             allData = weightRaw.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
-            
-            // 處理目標資料 (轉換成數字格式方便查找)
             monthlyTargets = targetRaw.filter(row => row.MONTH && row.TARGET_KG).map(row => ({
                 month: parseInt(row.MONTH),
                 target: parseFloat(row.TARGET_KG)
             }));
 
-            // 計算 7 日平均
             const ma7Values = getMovingAverage(allData, 7);
             allData.forEach((d, i) => { d.ma7 = ma7Values[i]; });
 
             setupMonthSelector();
             renderAll();
-        } catch (err) {
-            console.error("資料讀取失敗:", err);
-        }
+        } catch (err) { console.error("資料讀取失敗:", err); }
     }
 
-    // 根據當前月份從資料中尋找目標，找不到則回傳 55.0
     function getMonthlyTarget() {
         const currentMonth = new Date().getMonth() + 1;
         const found = monthlyTargets.find(t => t.month === currentMonth);
@@ -204,16 +196,35 @@
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
-        dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "#7a9f8d" : "var(--morandi-blue)");
+        dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
 
-        // 3. 距離本月目標 (從 Sheets 抓取)
+        // 3. 距離本月目標
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 4. 今年累計
-        const totalDiff = (currentKg - startKg).toFixed(1);
-        document.getElementById('ytd-diff').innerHTML = `${totalDiff > 0 ? "+" : ""}${totalDiff}<span class="stat-unit">kg</span>`;
+        // 4. 達標預測邏輯 (關鍵更新)
+        const windowSize = 7;
+        if (allData.length > windowSize) {
+            const currentMA = parseFloat(latest.ma7);
+            const pastMA = parseFloat(allData[allData.length - windowSize - 1].ma7);
+            const weeklyLoss = pastMA - currentMA; 
+
+            if (weeklyLoss > 0.05) { 
+                const dailyLoss = weeklyLoss / 7;
+                const remainingKg = currentKg - FINAL_TARGET;
+                const daysToTarget = Math.ceil(remainingKg / dailyLoss);
+                
+                const targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + daysToTarget);
+                
+                document.getElementById('predict-date').innerText = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
+                document.getElementById('days-left').innerText = `(約 ${daysToTarget} 天)`;
+            } else {
+                document.getElementById('predict-date').innerText = "觀察中";
+                document.getElementById('days-left').innerText = "(維持穩定速度中)";
+            }
+        }
 
         // 5. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
