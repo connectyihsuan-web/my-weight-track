@@ -41,9 +41,18 @@
             padding: 25px 30px;
             margin-bottom: 25px;
             border: 1px solid var(--border-color);
-            text-align: center;
         }
-        .progress-label { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9rem; color: var(--text-sub); }
+        .progress-label { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-end;
+            margin-bottom: 12px; 
+            font-size: 0.9rem; 
+            color: var(--text-sub); 
+        }
+        .progress-info { text-align: right; }
+        .predict-tag { color: var(--morandi-green); font-weight: 500; margin-left: 8px; }
+        
         .progress-bar-bg { background: var(--progress-bg); height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
         .progress-bar-fill { 
             background: linear-gradient(90deg, var(--morandi-blue), var(--morandi-rose)); 
@@ -59,8 +68,7 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 調整列數以容納 BMI */
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
@@ -87,8 +95,11 @@
 <div class="container">
     <div class="progress-card">
         <div class="progress-label">
-            <span>減重進度 </span>
-            <span id="progress-percent">0%</span>
+            <span>減重進度 <strong id="progress-percent">0%</strong></span>
+            <div class="progress-info">
+                預計達標 <span id="predict-date-top" class="predict-tag">--/--</span>
+                <span id="days-left-top" style="font-size: 0.75rem;">(--天)</span>
+            </div>
         </div>
         <div class="progress-bar-bg">
             <div id="progress-fill" class="progress-bar-fill"></div>
@@ -113,11 +124,6 @@
             <div class="stat-item">
                 <div id="target-label" class="stat-label">目標距離</div>
                 <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">預計達標</div>
-                <div id="predict-date" class="stat-value" style="color: var(--morandi-green);">--</div>
-                <div id="days-left" class="stat-subtext">--</div>
             </div>
         </div>
     </div>
@@ -197,23 +203,14 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日 BMI (從試算表 F 欄讀取)
+        // 2. BMI
         const currentBmi = parseFloat(latest.BMI);
-        const bmiElem = document.getElementById('cur-bmi');
-        const bmiStatusElem = document.getElementById('bmi-status');
-        
         if (!isNaN(currentBmi)) {
-            bmiElem.innerText = currentBmi.toFixed(1);
-            if (currentBmi < 18.5) {
-                bmiStatusElem.innerText = "體重過輕";
-                bmiStatusElem.style.color = "var(--morandi-blue)";
-            } else if (currentBmi >= 18.5 && currentBmi < 24) {
-                bmiStatusElem.innerText = "理想範圍";
-                bmiStatusElem.style.color = "var(--morandi-green)";
-            } else {
-                bmiStatusElem.innerText = "過重 / 肥胖";
-                bmiStatusElem.style.color = "var(--morandi-rose)";
-            }
+            document.getElementById('cur-bmi').innerText = currentBmi.toFixed(1);
+            const status = document.getElementById('bmi-status');
+            if (currentBmi < 18.5) { status.innerText = "體重過輕"; status.style.color = "var(--morandi-blue)"; }
+            else if (currentBmi < 24) { status.innerText = "理想範圍"; status.style.color = "var(--morandi-green)"; }
+            else { status.innerText = "過重/肥胖"; status.style.color = "var(--morandi-rose)"; }
         }
 
         // 3. 今日變化
@@ -223,12 +220,12 @@
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
         dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
 
-        // 4. 距離本月目標
+        // 4. 目標距離
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 5. 達標預測
+        // 5. 達標預測 (移至進度條上方)
         const windowSize = 7;
         if (allData.length > windowSize) {
             const currentMA = parseFloat(latest.ma7);
@@ -242,15 +239,15 @@
                 const targetDate = new Date();
                 targetDate.setDate(targetDate.getDate() + daysToTarget);
                 
-                document.getElementById('predict-date').innerText = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
-                document.getElementById('days-left').innerText = `(約 ${daysToTarget} 天)`;
+                document.getElementById('predict-date-top').innerText = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
+                document.getElementById('days-left-top').innerText = `(約 ${daysToTarget} 天)`;
             } else {
-                document.getElementById('predict-date').innerText = "觀察中";
-                document.getElementById('days-left').innerText = "(維持穩定中)";
+                document.getElementById('predict-date-top').innerText = "觀察中";
+                document.getElementById('days-left-top').innerText = "(穩定維持中)";
             }
         }
 
-        // 6. 進度條
+        // 6. 進度條更新
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
