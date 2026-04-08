@@ -33,7 +33,7 @@
         .header { text-align: center; margin-bottom: 30px; }
         .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
         
-        .container { width: 100%; max-width: 900px; }
+        .container { width: 100%; max-width: 1000px; }
         
         .progress-card {
             background: var(--card-bg);
@@ -59,7 +59,8 @@
             border: 1px solid var(--border-color);
         }
 
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        /* 調整列數以容納 BMI */
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
@@ -101,15 +102,20 @@
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
+                <div class="stat-label">今日 BMI</div>
+                <div id="cur-bmi" class="stat-value">--</div>
+                <div id="bmi-status" class="stat-subtext">--</div>
+            </div>
+            <div class="stat-item">
                 <div class="stat-label">今日變化</div>
                 <div id="day-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div id="target-label" class="stat-label">4 月目標距離</div>
+                <div id="target-label" class="stat-label">目標距離</div>
                 <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">預計達標 </div>
+                <div class="stat-label">預計達標</div>
                 <div id="predict-date" class="stat-value" style="color: var(--morandi-green);">--</div>
                 <div id="days-left" class="stat-subtext">--</div>
             </div>
@@ -191,19 +197,38 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日變化
+        // 2. 今日 BMI (從試算表 F 欄讀取)
+        const currentBmi = parseFloat(latest.BMI);
+        const bmiElem = document.getElementById('cur-bmi');
+        const bmiStatusElem = document.getElementById('bmi-status');
+        
+        if (!isNaN(currentBmi)) {
+            bmiElem.innerText = currentBmi.toFixed(1);
+            if (currentBmi < 18.5) {
+                bmiStatusElem.innerText = "體重過輕";
+                bmiStatusElem.style.color = "var(--morandi-blue)";
+            } else if (currentBmi >= 18.5 && currentBmi < 24) {
+                bmiStatusElem.innerText = "理想範圍";
+                bmiStatusElem.style.color = "var(--morandi-green)";
+            } else {
+                bmiStatusElem.innerText = "過重 / 肥胖";
+                bmiStatusElem.style.color = "var(--morandi-rose)";
+            }
+        }
+
+        // 3. 今日變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
         dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
 
-        // 3. 距離本月目標
+        // 4. 距離本月目標
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 4. 達標預測邏輯 (關鍵更新)
+        // 5. 達標預測
         const windowSize = 7;
         if (allData.length > windowSize) {
             const currentMA = parseFloat(latest.ma7);
@@ -214,7 +239,6 @@
                 const dailyLoss = weeklyLoss / 7;
                 const remainingKg = currentKg - FINAL_TARGET;
                 const daysToTarget = Math.ceil(remainingKg / dailyLoss);
-                
                 const targetDate = new Date();
                 targetDate.setDate(targetDate.getDate() + daysToTarget);
                 
@@ -222,11 +246,11 @@
                 document.getElementById('days-left').innerText = `(約 ${daysToTarget} 天)`;
             } else {
                 document.getElementById('predict-date').innerText = "觀察中";
-                document.getElementById('days-left').innerText = "(維持穩定速度中)";
+                document.getElementById('days-left').innerText = "(維持穩定中)";
             }
         }
 
-        // 5. 進度條
+        // 6. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
