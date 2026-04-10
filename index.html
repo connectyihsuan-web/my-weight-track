@@ -68,14 +68,14 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 桌面版 Grid */
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+        /* 桌面版 Grid：擴充為 6 格也會自動適應 */
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
         .stat-value { font-size: 1.3rem; font-weight: 500; color: var(--morandi-blue); }
         .stat-unit { font-size: 0.75rem; margin-left: 2px; }
-        .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; }
+        .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; height: 12px; }
 
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
         select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; }
@@ -85,7 +85,7 @@
 
         canvas { width: 100% !important; max-height: 320px; }
 
-        /* 手機版排版優化 (關鍵修復位置) */
+        /* 手機版排版優化 */
         @media (max-width: 600px) {
             body { padding: 20px 15px; }
             .header h1 { font-size: 1.5rem; }
@@ -134,19 +134,32 @@
             <div class="stat-item">
                 <div class="stat-label">今日體重</div>
                 <div id="cur-kg" class="stat-value">--</div>
+                <div class="stat-subtext"></div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">今日體脂</div>
+                <div class="stat-label">體脂率</div>
                 <div id="cur-fat" class="stat-value">--</div>
                 <div id="fat-change" class="stat-subtext">--</div>
             </div>
             <div class="stat-item">
+                <div class="stat-label">除脂體重 LBM</div>
+                <div id="cur-lbm" class="stat-value">--</div>
+                <div class="stat-subtext"></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">脂肪重量</div>
+                <div id="cur-fat-kg" class="stat-value">--</div>
+                <div class="stat-subtext"></div>
+            </div>
+            <div class="stat-item">
                 <div class="stat-label">體重變化</div>
                 <div id="day-diff" class="stat-value">--</div>
+                <div class="stat-subtext">較前次紀錄</div>
             </div>
             <div class="stat-item">
                 <div id="target-label" class="stat-label">目標距離</div>
                 <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
+                <div class="stat-subtext"></div>
             </div>
         </div>
     </div>
@@ -226,38 +239,59 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日體脂
-        const currentFat = parseFloat(latest.FAT);
-        const prevFat = parseFloat(prev.FAT);
+        // 2. 今日體脂 (更新對應欄位名稱為 'FAT %')
+        const currentFat = parseFloat(latest['FAT %']);
+        const prevFat = parseFloat(prev['FAT %']);
+        const fatStatus = document.getElementById('fat-change');
+
         if (!isNaN(currentFat)) {
             document.getElementById('cur-fat').innerHTML = `${currentFat.toFixed(1)}<span class="stat-unit">%</span>`;
-            const fatDiff = (currentFat - prevFat).toFixed(1);
-            const fatStatus = document.getElementById('fat-change');
-            if (fatDiff > 0) {
-                fatStatus.innerText = `↑ ${fatDiff}%`;
-                fatStatus.style.color = "var(--morandi-rose)";
-            } else if (fatDiff < 0) {
-                fatStatus.innerText = `↓ ${Math.abs(fatDiff)}%`;
-                fatStatus.style.color = "var(--morandi-green)";
+            
+            if (!isNaN(prevFat)) {
+                const fatDiff = (currentFat - prevFat).toFixed(1);
+                if (fatDiff > 0) {
+                    fatStatus.innerText = `↑ ${fatDiff}%`;
+                    fatStatus.style.color = "var(--morandi-rose)";
+                } else if (fatDiff < 0) {
+                    fatStatus.innerText = `↓ ${Math.abs(fatDiff)}%`;
+                    fatStatus.style.color = "var(--morandi-green)";
+                } else {
+                    fatStatus.innerText = "持平";
+                    fatStatus.style.color = "var(--morandi-blue)";
+                }
             } else {
-                fatStatus.innerText = "持平";
-                fatStatus.style.color = "var(--morandi-blue)";
+                fatStatus.innerText = "";
             }
+        } else {
+            document.getElementById('cur-fat').innerHTML = `--<span class="stat-unit">%</span>`;
+            fatStatus.innerText = "";
         }
 
-        // 3. 體重變化
+        // 3. 新增：除脂體重 (LBM)
+        const currentLBM = parseFloat(latest.LBM);
+        if (!isNaN(currentLBM)) {
+            document.getElementById('cur-lbm').innerHTML = `${currentLBM.toFixed(1)}<span class="stat-unit">kg</span>`;
+        }
+
+        // 4. 新增：脂肪重量 (FAT kg)
+        const currentFatKg = parseFloat(latest['FAT kg']);
+        if (!isNaN(currentFatKg)) {
+            document.getElementById('cur-fat-kg').innerHTML = `${currentFatKg.toFixed(1)}<span class="stat-unit">kg</span>`;
+        }
+
+        // 5. 體重變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
         dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
 
-        // 4. 目標距離
+        // 6. 目標距離
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 5. 達標預測
+        // 7. 達標預測
         const windowSize = 7;
         if (allData.length > windowSize) {
             const currentMA = parseFloat(latest.ma7);
@@ -279,7 +313,7 @@
             }
         }
 
-        // 6. 進度條
+        // 8. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
@@ -369,6 +403,16 @@
                         label: '7日平均',
                         data: filtered.map(d => d.ma7),
                         borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
+                    },
+                    // 更新：新增 LBM 的資料線 (虛線)
+                    {
+                        label: '除脂體重 (LBM)',
+                        data: filtered.map(d => d.LBM && !isNaN(parseFloat(d.LBM)) ? parseFloat(d.LBM) : null),
+                        borderColor: '#7a9f8d', // 使用 morandi-green
+                        borderWidth: 2,
+                        borderDash: [3, 3],
+                        pointRadius: 0,
+                        fill: false
                     }
                 ]
             },
@@ -380,11 +424,17 @@
                     tooltip: {
                         callbacks: {
                             label: function(context) {
+                                const d = filtered[context.dataIndex];
                                 if (context.datasetIndex === 0) {
-                                    const d = filtered[context.dataIndex];
-                                    return ` 體重: ${context.parsed.y} kg${d.FAT ? ' | 體脂: ' + d.FAT + '%' : ''}${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
+                                    // 更新 tooltips，支援新的 'FAT %' 屬性
+                                    const fatDisplay = d['FAT %'] ? ` | 體脂: ${d['FAT %']}%` : '';
+                                    const noteDisplay = d.備註 ? ` | 📝 ${d.備註}` : '';
+                                    return ` 體重: ${context.parsed.y} kg${fatDisplay}${noteDisplay}`;
+                                } else if (context.datasetIndex === 1) {
+                                    return ` 7日平均: ${context.parsed.y} kg`;
+                                } else if (context.datasetIndex === 2) {
+                                    return ` LBM: ${context.parsed.y} kg`;
                                 }
-                                return ` 7日平均: ${context.parsed.y} kg`;
                             }
                         }
                     }
