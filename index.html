@@ -68,7 +68,7 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 桌面版 Grid：擴充為 6 格也會自動適應 */
+        /* 桌面版 Grid */
         .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
@@ -78,12 +78,13 @@
         .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; height: 12px; }
 
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
-        select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; }
+        select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; cursor: pointer;}
 
         h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
         h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
 
-        canvas { width: 100% !important; max-height: 320px; }
+        .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 30px;}
+        .chart-container:last-child { margin-bottom: 0; }
 
         /* 手機版排版優化 */
         @media (max-width: 600px) {
@@ -98,13 +99,12 @@
                 border-bottom: 1px solid var(--border-color);
                 padding-bottom: 15px;
             }
-            /* 讓右側那一欄有左邊框感 */
             .stat-item:nth-child(even) { border-left: 1px solid var(--border-color); }
-            /* 讓最後兩個不顯示底線 */
             .stat-item:nth-last-child(-n+2) { border-bottom: none; padding-bottom: 0; }
             
             .card { padding: 20px; }
             .stat-value { font-size: 1.1rem; }
+            .chart-container { height: 280px; }
         }
     </style>
 </head>
@@ -166,15 +166,25 @@
 
     <div class="card">
         <h2>YTD 年度趨勢</h2>
-        <canvas id="ytdChart"></canvas>
+        <div class="chart-container">
+            <canvas id="ytdChart"></canvas>
+        </div>
     </div>
 
     <div class="card">
         <div class="controls">
             <select id="monthSelect"></select>
         </div>
-        <h2>單月詳細曲線</h2>
-        <canvas id="monthTrendChart"></canvas>
+        
+        <h2>單月體重趨勢</h2>
+        <div class="chart-container">
+            <canvas id="monthWeightChart"></canvas>
+        </div>
+        
+        <h2 style="margin-top: 40px;">單月身體組成</h2>
+        <div class="chart-container">
+            <canvas id="monthCompChart"></canvas>
+        </div>
     </div>
 </div>
 
@@ -239,7 +249,7 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日體脂 (更新對應欄位名稱為 'FAT %')
+        // 2. 今日體脂
         const currentFat = parseFloat(latest['FAT %']);
         const prevFat = parseFloat(prev['FAT %']);
         const fatStatus = document.getElementById('fat-change');
@@ -267,13 +277,13 @@
             fatStatus.innerText = "";
         }
 
-        // 3. 新增：除脂體重 (LBM)
+        // 3. 除脂體重 (LBM)
         const currentLBM = parseFloat(latest.LBM);
         if (!isNaN(currentLBM)) {
             document.getElementById('cur-lbm').innerHTML = `${currentLBM.toFixed(1)}<span class="stat-unit">kg</span>`;
         }
 
-        // 4. 新增：脂肪重量 (FAT kg)
+        // 4. 脂肪重量 (FAT kg)
         const currentFatKg = parseFloat(latest['FAT kg']);
         if (!isNaN(currentFatKg)) {
             document.getElementById('cur-fat-kg').innerHTML = `${currentFatKg.toFixed(1)}<span class="stat-unit">kg</span>`;
@@ -385,9 +395,17 @@
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
-        const ctx = document.getElementById('monthTrendChart').getContext('2d');
-        if (charts.month) charts.month.destroy();
-        charts.month = new Chart(ctx, {
+        // 計算當月體重的最大值與最小值，讓圖表 Y 軸自適應，波動更明顯
+        const weights = filtered.map(d => parseFloat(d.KG)).filter(w => !isNaN(w));
+        const minWeight = Math.floor(Math.min(...weights)) - 0.5;
+        const maxWeight = Math.ceil(Math.max(...weights)) + 0.5;
+
+        // ==========================================
+        // 圖表 1：體重與 7 日平均
+        // ==========================================
+        const ctxWeight = document.getElementById('monthWeightChart').getContext('2d');
+        if (charts.monthWeight) charts.monthWeight.destroy();
+        charts.monthWeight = new Chart(ctxWeight, {
             type: 'line',
             data: {
                 labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
@@ -403,16 +421,6 @@
                         label: '7日平均',
                         data: filtered.map(d => d.ma7),
                         borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
-                    },
-                    // 更新：新增 LBM 的資料線 (虛線)
-                    {
-                        label: '除脂體重 (LBM)',
-                        data: filtered.map(d => d.LBM && !isNaN(parseFloat(d.LBM)) ? parseFloat(d.LBM) : null),
-                        borderColor: '#7a9f8d', // 使用 morandi-green
-                        borderWidth: 2,
-                        borderDash: [3, 3],
-                        pointRadius: 0,
-                        fill: false
                     }
                 ]
             },
@@ -426,20 +434,94 @@
                             label: function(context) {
                                 const d = filtered[context.dataIndex];
                                 if (context.datasetIndex === 0) {
-                                    // 更新 tooltips，支援新的 'FAT %' 屬性
-                                    const fatDisplay = d['FAT %'] ? ` | 體脂: ${d['FAT %']}%` : '';
-                                    const noteDisplay = d.備註 ? ` | 📝 ${d.備註}` : '';
-                                    return ` 體重: ${context.parsed.y} kg${fatDisplay}${noteDisplay}`;
-                                } else if (context.datasetIndex === 1) {
-                                    return ` 7日平均: ${context.parsed.y} kg`;
-                                } else if (context.datasetIndex === 2) {
-                                    return ` LBM: ${context.parsed.y} kg`;
+                                    return ` 體重: ${context.parsed.y} kg${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
                                 }
+                                return ` 7日平均: ${context.parsed.y} kg`;
                             }
                         }
                     }
                 },
-                scales: { y: { beginAtZero: false } }
+                scales: { 
+                    y: { 
+                        min: minWeight,
+                        max: maxWeight 
+                    } 
+                }
+            }
+        });
+
+        // ==========================================
+        // 圖表 2：身體組成 (FAT %, LBM, FAT kg)
+        // ==========================================
+        const ctxComp = document.getElementById('monthCompChart').getContext('2d');
+        if (charts.monthComp) charts.monthComp.destroy();
+        charts.monthComp = new Chart(ctxComp, {
+            type: 'line',
+            data: {
+                labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
+                datasets: [
+                    {
+                        label: '除脂體重 (LBM)',
+                        data: filtered.map(d => d.LBM ? parseFloat(d.LBM) : null),
+                        borderColor: '#7a9f8d', // 綠色
+                        backgroundColor: '#7a9f8d',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        yAxisID: 'y', 
+                        spanGaps: true
+                    },
+                    {
+                        label: '脂肪重 (FAT kg)',
+                        data: filtered.map(d => d['FAT kg'] ? parseFloat(d['FAT kg']) : null),
+                        borderColor: '#a68d85', // 玫瑰色
+                        backgroundColor: '#a68d85',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        yAxisID: 'y', 
+                        spanGaps: true
+                    },
+                    {
+                        label: '體脂率 (FAT %)',
+                        data: filtered.map(d => d['FAT %'] ? parseFloat(d['FAT %']) : null),
+                        borderColor: '#7a8d9f', // 藍色
+                        backgroundColor: '#7a8d9f',
+                        borderWidth: 2,
+                        borderDash: [5, 5], 
+                        pointRadius: 3,
+                        yAxisID: 'y1', 
+                        spanGaps: true
+                    }
+                ]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let unit = context.datasetIndex === 2 ? '%' : 'kg';
+                                return ` ${context.dataset.label}: ${context.parsed.y} ${unit}`;
+                            }
+                        }
+                    }
+                },
+                scales: { 
+                    y: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'left',
+                        title: { display: true, text: '重量 (kg)', font: {size: 10} }
+                    },
+                    y1: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'right',
+                        title: { display: true, text: '比例 (%)', font: {size: 10} },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
             }
         });
     }
