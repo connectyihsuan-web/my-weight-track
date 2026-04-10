@@ -68,6 +68,7 @@
             border: 1px solid var(--border-color);
         }
 
+        /* 桌面版 Grid */
         .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
@@ -83,6 +84,28 @@
         h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
 
         canvas { width: 100% !important; max-height: 320px; }
+
+        /* 手機版排版優化 (關鍵修復位置) */
+        @media (max-width: 600px) {
+            body { padding: 20px 15px; }
+            .header h1 { font-size: 1.5rem; }
+            .stats-row { 
+                grid-template-columns: 1fr 1fr; 
+                gap: 20px 0; 
+            }
+            .stat-item {
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 15px;
+            }
+            /* 讓右側那一欄有左邊框感 */
+            .stat-item:nth-child(even) { border-left: 1px solid var(--border-color); }
+            /* 讓最後兩個不顯示底線 */
+            .stat-item:nth-last-child(-n+2) { border-bottom: none; padding-bottom: 0; }
+            
+            .card { padding: 20px; }
+            .stat-value { font-size: 1.1rem; }
+        }
     </style>
 </head>
 <body>
@@ -141,46 +164,7 @@
         <canvas id="monthTrendChart"></canvas>
     </div>
 </div>
-/* 手機版排版優化 (螢幕寬度小於 600px 時觸發) */
-@media (max-width: 600px) {
-    body {
-        padding: 20px 15px; /* 縮小頁面邊距 */
-    }
 
-    .header h1 {
-        font-size: 1.5rem; /* 標題縮小一點點 */
-    }
-
-    .stats-row {
-        grid-template-columns: 1fr 1fr; /* 強制 2x2 排版 */
-        gap: 20px 0; /* 增加上下間距 */
-    }
-
-    .stat-item {
-        border-right: none; /* 取消原本的右邊框 */
-        border-bottom: 1px solid var(--border-color); /* 改為底部分隔線 */
-        padding-bottom: 15px;
-    }
-
-    /* 讓最後兩個項目不需要底線 */
-    .stat-item:nth-last-child(-n+2) {
-        border-bottom: none;
-        padding-bottom: 0;
-    }
-
-    /* 增加左側垂直分隔線感 (可選) */
-    .stat-item:nth-child(even) {
-        border-left: 1px solid var(--border-color);
-    }
-    
-    .card {
-        padding: 20px; /* 縮小卡片內邊距 */
-    }
-    
-    h2 {
-        font-size: 1rem;
-    }
-}
 <script>
     const weightUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
     const targetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?gid=2139827519&single=true&output=csv';
@@ -242,7 +226,7 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日體脂 (取代 BMI)
+        // 2. 今日體脂
         const currentFat = parseFloat(latest.FAT);
         const prevFat = parseFloat(prev.FAT);
         if (!isNaN(currentFat)) {
@@ -261,7 +245,7 @@
             }
         }
 
-        // 3. 今日變化 (體重)
+        // 3. 體重變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
