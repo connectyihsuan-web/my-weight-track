@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YH｜體重紀錄看板</title>
+    <title>YH｜體重與體脂看板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
@@ -88,7 +88,7 @@
 <body>
 
 <div class="header">
-    <h1>Yi Hsuan Weight Tracking</h1>
+    <h1>Yi Hsuan Weight & Fat Tracking</h1>
     <p>捕捉日復一日的細微變化</p>
 </div>
 
@@ -113,12 +113,12 @@
                 <div id="cur-kg" class="stat-value">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">今日 BMI</div>
-                <div id="cur-bmi" class="stat-value">--</div>
-                <div id="bmi-status" class="stat-subtext">--</div>
+                <div class="stat-label">今日體脂</div>
+                <div id="cur-fat" class="stat-value">--</div>
+                <div id="fat-change" class="stat-subtext">--</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">今日變化</div>
+                <div class="stat-label">體重變化</div>
                 <div id="day-diff" class="stat-value">--</div>
             </div>
             <div class="stat-item">
@@ -129,7 +129,7 @@
     </div>
 
     <div class="card">
-        <h2>YTD 年度體重曲線</h2>
+        <h2>YTD 年度趨勢</h2>
         <canvas id="ytdChart"></canvas>
     </div>
 
@@ -137,7 +137,7 @@
         <div class="controls">
             <select id="monthSelect"></select>
         </div>
-        <h2>單月趨勢</h2>
+        <h2>單月詳細曲線</h2>
         <canvas id="monthTrendChart"></canvas>
     </div>
 </div>
@@ -203,17 +203,26 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. BMI
-        const currentBmi = parseFloat(latest.BMI);
-        if (!isNaN(currentBmi)) {
-            document.getElementById('cur-bmi').innerText = currentBmi.toFixed(1);
-            const status = document.getElementById('bmi-status');
-            if (currentBmi < 18.5) { status.innerText = "體重過輕"; status.style.color = "var(--morandi-blue)"; }
-            else if (currentBmi < 24) { status.innerText = "理想範圍"; status.style.color = "var(--morandi-green)"; }
-            else { status.innerText = "過重/肥胖"; status.style.color = "var(--morandi-rose)"; }
+        // 2. 今日體脂 (取代 BMI)
+        const currentFat = parseFloat(latest.FAT);
+        const prevFat = parseFloat(prev.FAT);
+        if (!isNaN(currentFat)) {
+            document.getElementById('cur-fat').innerHTML = `${currentFat.toFixed(1)}<span class="stat-unit">%</span>`;
+            const fatDiff = (currentFat - prevFat).toFixed(1);
+            const fatStatus = document.getElementById('fat-change');
+            if (fatDiff > 0) {
+                fatStatus.innerText = `↑ ${fatDiff}%`;
+                fatStatus.style.color = "var(--morandi-rose)";
+            } else if (fatDiff < 0) {
+                fatStatus.innerText = `↓ ${Math.abs(fatDiff)}%`;
+                fatStatus.style.color = "var(--morandi-green)";
+            } else {
+                fatStatus.innerText = "持平";
+                fatStatus.style.color = "var(--morandi-blue)";
+            }
         }
 
-        // 3. 今日變化
+        // 3. 今日變化 (體重)
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
@@ -225,7 +234,7 @@
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 5. 達標預測 (移至進度條上方)
+        // 5. 達標預測
         const windowSize = 7;
         if (allData.length > windowSize) {
             const currentMA = parseFloat(latest.ma7);
@@ -247,7 +256,7 @@
             }
         }
 
-        // 6. 進度條更新
+        // 6. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
@@ -350,7 +359,7 @@
                             label: function(context) {
                                 if (context.datasetIndex === 0) {
                                     const d = filtered[context.dataIndex];
-                                    return ` 體重: ${context.parsed.y} kg${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
+                                    return ` 體重: ${context.parsed.y} kg${d.FAT ? ' | 體脂: ' + d.FAT + '%' : ''}${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
                                 }
                                 return ` 7日平均: ${context.parsed.y} kg`;
                             }
