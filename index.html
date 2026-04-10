@@ -68,8 +68,8 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 桌面版 Grid */
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+        /* 桌面版 Grid：改為均分 4 格 */
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
         .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
@@ -86,7 +86,7 @@
         .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 30px;}
         .chart-container:last-child { margin-bottom: 0; }
 
-        /* 手機版排版優化 */
+        /* 手機版排版優化：維持 2x2 */
         @media (max-width: 600px) {
             body { padding: 20px 15px; }
             .header h1 { font-size: 1.5rem; }
@@ -267,31 +267,21 @@
             fatStatus.innerText = "";
         }
 
-        // 3. 除脂體重 (LBM)
-        const currentLBM = parseFloat(latest.LBM);
-        if (!isNaN(currentLBM)) {
-            document.getElementById('cur-lbm').innerHTML = `${currentLBM.toFixed(1)}<span class="stat-unit">kg</span>`;
-        }
+        // (已移除 LBM 與 FAT kg 的文字顯示邏輯，避免報錯)
 
-        // 4. 脂肪重量 (FAT kg)
-        const currentFatKg = parseFloat(latest['FAT kg']);
-        if (!isNaN(currentFatKg)) {
-            document.getElementById('cur-fat-kg').innerHTML = `${currentFatKg.toFixed(1)}<span class="stat-unit">kg</span>`;
-        }
-
-        // 5. 體重變化
+        // 3. 體重變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
         const dayDiffElem = document.getElementById('day-diff');
         const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
         dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
         dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
 
-        // 6. 目標距離
+        // 4. 目標距離
         const dist = (currentKg - monthlyTarget).toFixed(1);
         document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
-        // 7. 達標預測
+        // 5. 達標預測
         const windowSize = 7;
         if (allData.length > windowSize) {
             const currentMA = parseFloat(latest.ma7);
@@ -313,7 +303,7 @@
             }
         }
 
-        // 8. 進度條
+        // 6. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
         setTimeout(() => {
@@ -385,7 +375,6 @@
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
-        // 計算當月體重的最大值與最小值，讓圖表 Y 軸自適應，波動更明顯
         const weights = filtered.map(d => parseFloat(d.KG)).filter(w => !isNaN(w));
         const minWeight = Math.floor(Math.min(...weights)) - 0.5;
         const maxWeight = Math.ceil(Math.max(...weights)) + 0.5;
@@ -453,7 +442,7 @@
                     {
                         label: '除脂體重 (LBM)',
                         data: filtered.map(d => d.LBM ? parseFloat(d.LBM) : null),
-                        borderColor: '#7a9f8d', // 綠色
+                        borderColor: '#7a9f8d', 
                         backgroundColor: '#7a9f8d',
                         borderWidth: 2,
                         pointRadius: 3,
@@ -463,7 +452,7 @@
                     {
                         label: '脂肪重 (FAT kg)',
                         data: filtered.map(d => d['FAT kg'] ? parseFloat(d['FAT kg']) : null),
-                        borderColor: '#a68d85', // 玫瑰色
+                        borderColor: '#a68d85', 
                         backgroundColor: '#a68d85',
                         borderWidth: 2,
                         pointRadius: 3,
@@ -473,7 +462,7 @@
                     {
                         label: '體脂率 (FAT %)',
                         data: filtered.map(d => d['FAT %'] ? parseFloat(d['FAT %']) : null),
-                        borderColor: '#7a8d9f', // 藍色
+                        borderColor: '#7a8d9f', 
                         backgroundColor: '#7a8d9f',
                         borderWidth: 2,
                         borderDash: [5, 5], 
