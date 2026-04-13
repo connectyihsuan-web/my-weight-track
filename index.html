@@ -402,40 +402,106 @@
 
         // 圖表 2：身體組成 (全部改為 7 日平均趨勢)
         const ctxComp = document.getElementById('monthCompChart').getContext('2d');
-        if (charts.monthComp) charts.monthComp.destroy();
-        charts.monthComp = new Chart(ctxComp, {
-            type: 'line',
-            data: {
-                labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
-                datasets: [
-                    {
-                        label: 'LBM (平均)',
-                        data: filtered.map(d => d.lbmMa7),
-                        borderColor: '#7a9f8d', borderWidth: 2, pointRadius: 0, yAxisID: 'y', spanGaps: true
-                    },
-                    {
-                        label: 'FAT kg (平均)',
-                        data: filtered.map(d => d.fatKgMa7),
-                        borderColor: '#a68d85', borderWidth: 2, pointRadius: 0, yAxisID: 'y', spanGaps: true
-                    },
-                    {
-                        label: '體脂率 (7日平均 %)',
-                        data: filtered.map(d => d.fatMa7),
-                        borderColor: '#7a8d9f', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, yAxisID: 'y1', spanGaps: true
-                    }
-                ]
+if (charts.monthComp) charts.monthComp.destroy();
+
+// 取得當前顯示數據的最大最小值，用來做動態 Y 軸縮放
+const lbmValues = filtered.map(d => parseFloat(d.lbmMa7)).filter(v => !isNaN(v));
+const fatKgValues = filtered.map(d => parseFloat(d.fatKgMa7)).filter(v => !isNaN(v));
+const combinedWeight = [...lbmValues, ...fatKgValues];
+const weightMin = Math.min(...combinedWeight) * 0.95; // 留 5% 緩衝
+const weightMax = Math.max(...combinedWeight) * 1.05;
+
+charts.monthComp = new Chart(ctxComp, {
+    type: 'line',
+    data: {
+        labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
+        datasets: [
+            {
+                label: 'LBM (平均)',
+                data: filtered.map(d => d.lbmMa7),
+                borderColor: '#7a9f8d',
+                borderWidth: 2,
+                pointRadius: 0,
+                yAxisID: 'y',
+                spanGaps: true,
+                tension: 0.2
             },
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } },
-                scales: { 
-                    y: { type: 'linear', position: 'left', title: { display: true, text: '重量 (kg)' } },
-                    y1: { type: 'linear', position: 'right', title: { display: true, text: '比例 (%)' }, grid: { drawOnChartArea: false } }
+            {
+                label: 'FAT kg (平均)',
+                data: filtered.map(d => d.fatKgMa7),
+                borderColor: '#a68d85',
+                borderWidth: 2,
+                pointRadius: 0,
+                yAxisID: 'y',
+                spanGaps: true,
+                tension: 0.2
+            },
+            {
+                label: '體脂率 (平均 %)',
+                data: filtered.map(d => d.fatMa7),
+                borderColor: '#7a8d9f',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                yAxisID: 'y1',
+                spanGaps: true,
+                tension: 0.2
+            }
+        ]
+    },
+    options: { 
+        responsive: true, 
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { 
+            legend: { 
+                position: 'bottom', 
+                labels: { 
+                    usePointStyle: true, 
+                    boxWidth: 6, // 這裡調小圈圈尺寸 (原本是 8 或更大)
+                    font: { size: 11 }
+                } 
+            },
+            tooltip: {
+                padding: 10,
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                titleColor: '#2d2d2d',
+                bodyColor: '#555',
+                borderColor: '#e8e8e8',
+                borderWidth: 1,
+                bodyFont: { size: 12 },
+                callbacks: {
+                    label: function(context) {
+                        let unit = context.datasetIndex === 2 ? '%' : 'kg';
+                        return ` ${context.dataset.label}: ${context.parsed.y} ${unit}`;
+                    }
                 }
             }
-        });
+        },
+        scales: { 
+            y: { 
+                type: 'linear', 
+                position: 'left', 
+                min: weightMin, // 動態起始值，不再從 0 開始
+                max: weightMax,
+                grid: { color: '#f0f0f0' },
+                title: { display: false } 
+            },
+            y1: { 
+                type: 'linear', 
+                position: 'right', 
+                // 體脂率也做動態縮放
+                suggestedMin: Math.min(...filtered.map(d => parseFloat(d.fatMa7)).filter(v => !isNaN(v))) - 0.5,
+                suggestedMax: Math.max(...filtered.map(d => parseFloat(d.fatMa7)).filter(v => !isNaN(v))) + 0.5,
+                grid: { drawOnChartArea: false },
+                title: { display: false }
+            },
+            x: {
+                grid: { display: false }
+            }
+        }
     }
+});
 
     init();
 </script>
