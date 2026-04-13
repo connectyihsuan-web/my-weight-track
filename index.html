@@ -341,7 +341,7 @@
                 datasets: [{
                     data: allData.map(d => d.KG),
                     fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0,
-                    spanGaps: true, // 確保年度圖也不斷線
+                    spanGaps: true,
                     segment: {
                         borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
                         backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.15)' : 'rgba(142, 159, 177, 0.05)',
@@ -378,7 +378,7 @@
                     {
                         label: '體重',
                         data: filtered.map(d => d.KG),
-                        spanGaps: true, // 關鍵：確保出遊沒量時線條連貫
+                        spanGaps: true,
                         tension: 0.3, borderWidth: 2.5, pointRadius: 3,
                         pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
                         segment: { borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e' }
@@ -386,7 +386,7 @@
                     {
                         label: '7日平均',
                         data: filtered.map(d => d.ma7),
-                        spanGaps: true, // 平均線也連貫
+                        spanGaps: true,
                         borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
                     }
                 ]
@@ -447,8 +447,11 @@
                         position: 'bottom', 
                         labels: { 
                             usePointStyle: true, 
-                            boxWidth: 4, // 縮小圓點至 4，視覺更精緻
-                            padding: 20
+                            pointStyle: 'circle',
+                            boxWidth: 4, 
+                            pointStyleWidth: 4, // 強制指定圓點寬度，確保縮小
+                            padding: 40,        // 大幅增加間距，讓各項標籤拉開
+                            font: { size: 12 }
                         } 
                     },
                     tooltip: {
