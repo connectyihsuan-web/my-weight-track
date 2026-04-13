@@ -68,7 +68,6 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 桌面版 Grid：改為均分 4 格 */
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
         .stat-item:last-child { border-right: none; }
@@ -86,7 +85,6 @@
         .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 30px;}
         .chart-container:last-child { margin-bottom: 0; }
 
-        /* 手機版排版優化：維持 2x2 */
         @media (max-width: 600px) {
             body { padding: 20px 15px; }
             .header h1 { font-size: 1.5rem; }
@@ -101,7 +99,6 @@
             }
             .stat-item:nth-child(even) { border-left: 1px solid var(--border-color); }
             .stat-item:nth-last-child(-n+2) { border-bottom: none; padding-bottom: 0; }
-            
             .card { padding: 20px; }
             .stat-value { font-size: 1.1rem; }
             .chart-container { height: 280px; }
@@ -137,7 +134,7 @@
                 <div class="stat-subtext"></div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">體脂率</div>
+                <div class="stat-label">體脂率(當日)</div>
                 <div id="cur-fat" class="stat-value">--</div>
                 <div id="fat-change" class="stat-subtext">--</div>
             </div>
@@ -171,7 +168,7 @@
             <canvas id="monthWeightChart"></canvas>
         </div>
         
-        <h2 style="margin-top: 40px;">單月身體組成</h2>
+        <h2 style="margin-top: 40px;">單月身體組成 (7日平均)</h2>
         <div class="chart-container">
             <canvas id="monthCompChart"></canvas>
         </div>
@@ -210,12 +207,36 @@
                 target: parseFloat(row.TARGET_KG)
             }));
 
-            const ma7Values = getMovingAverage(allData, 7);
-            allData.forEach((d, i) => { d.ma7 = ma7Values[i]; });
+            // 計算體重與體脂的移動平均 (解決旅行斷點問題)
+            const maWeight = getMovingAverageGeneral(allData, 7, 'KG');
+            const maFat = getMovingAverageGeneral(allData, 7, 'FAT %');
+            const maLbm = getMovingAverageGeneral(allData, 7, 'LBM');
+            const maFatKg = getMovingAverageGeneral(allData, 7, 'FAT kg');
+
+            allData.forEach((d, i) => { 
+                d.ma7 = maWeight[i]; 
+                d.fatMa7 = maFat[i];
+                d.lbmMa7 = maLbm[i];
+                d.fatKgMa7 = maFatKg[i];
+            });
 
             setupMonthSelector();
             renderAll();
         } catch (err) { console.error("資料讀取失敗:", err); }
+    }
+
+    /**
+     * 通用平均值計算：自動忽略 NaN，並在數據不足時抓取最近的可用點
+     */
+    function getMovingAverageGeneral(dataArray, windowSize = 7, key = 'KG') {
+        return dataArray.map((val, index, arr) => {
+            const slice = arr.slice(Math.max(0, index - windowSize + 1), index + 1);
+            const validValues = slice.map(curr => parseFloat(curr[key])).filter(v => !isNaN(v));
+            
+            if (validValues.length === 0) return null;
+            const sum = validValues.reduce((acc, curr) => acc + curr, 0);
+            return (sum / validValues.length).toFixed(2);
+        });
     }
 
     function getMonthlyTarget() {
@@ -239,35 +260,19 @@
         // 1. 今日體重
         document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
         
-        // 2. 今日體脂
+        // 2. 今日體脂 (保留當日數值顯示在面板)
         const currentFat = parseFloat(latest['FAT %']);
         const prevFat = parseFloat(prev['FAT %']);
         const fatStatus = document.getElementById('fat-change');
 
         if (!isNaN(currentFat)) {
             document.getElementById('cur-fat').innerHTML = `${currentFat.toFixed(1)}<span class="stat-unit">%</span>`;
-            
             if (!isNaN(prevFat)) {
                 const fatDiff = (currentFat - prevFat).toFixed(1);
-                if (fatDiff > 0) {
-                    fatStatus.innerText = `↑ ${fatDiff}%`;
-                    fatStatus.style.color = "var(--morandi-rose)";
-                } else if (fatDiff < 0) {
-                    fatStatus.innerText = `↓ ${Math.abs(fatDiff)}%`;
-                    fatStatus.style.color = "var(--morandi-green)";
-                } else {
-                    fatStatus.innerText = "持平";
-                    fatStatus.style.color = "var(--morandi-blue)";
-                }
-            } else {
-                fatStatus.innerText = "";
+                fatStatus.innerText = fatDiff > 0 ? `↑ ${fatDiff}%` : (fatDiff < 0 ? `↓ ${Math.abs(fatDiff)}%` : "持平");
+                fatStatus.style.color = fatDiff > 0 ? "var(--morandi-rose)" : (fatDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
             }
-        } else {
-            document.getElementById('cur-fat').innerHTML = `--<span class="stat-unit">%</span>`;
-            fatStatus.innerText = "";
         }
-
-       
 
         // 3. 體重變化
         const dayDiff = (currentKg - prevKg).toFixed(1);
@@ -282,10 +287,9 @@
         document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
 
         // 5. 達標預測
-        const windowSize = 7;
-        if (allData.length > windowSize) {
+        if (allData.length > 7) {
             const currentMA = parseFloat(latest.ma7);
-            const pastMA = parseFloat(allData[allData.length - windowSize - 1].ma7);
+            const pastMA = parseFloat(allData[allData.length - 8].ma7);
             const weeklyLoss = pastMA - currentMA; 
 
             if (weeklyLoss > 0.05) { 
@@ -294,7 +298,6 @@
                 const daysToTarget = Math.ceil(remainingKg / dailyLoss);
                 const targetDate = new Date();
                 targetDate.setDate(targetDate.getDate() + daysToTarget);
-                
                 document.getElementById('predict-date-top').innerText = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
                 document.getElementById('days-left-top').innerText = `(約 ${daysToTarget} 天)`;
             } else {
@@ -303,24 +306,12 @@
             }
         }
 
-        // 6. 進度條
         const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
         document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
-        setTimeout(() => {
-            document.getElementById('progress-fill').style.width = progress + "%";
-        }, 100);
+        setTimeout(() => { document.getElementById('progress-fill').style.width = progress + "%"; }, 100);
 
         renderYTDChart();
         renderMonthTrend(document.getElementById('monthSelect').value);
-    }
-
-    function getMovingAverage(dataArray, windowSize = 7) {
-        return dataArray.map((val, index, arr) => {
-            if (index < windowSize - 1) return null;
-            const slice = arr.slice(index - windowSize + 1, index + 1);
-            const sum = slice.reduce((acc, curr) => acc + parseFloat(curr.KG), 0);
-            return (sum / windowSize).toFixed(2);
-        });
     }
 
     function setupMonthSelector() {
@@ -379,9 +370,7 @@
         const minWeight = Math.floor(Math.min(...weights)) - 0.5;
         const maxWeight = Math.ceil(Math.max(...weights)) + 0.5;
 
-        // ==========================================
         // 圖表 1：體重與 7 日平均
-        // ==========================================
         const ctxWeight = document.getElementById('monthWeightChart').getContext('2d');
         if (charts.monthWeight) charts.monthWeight.destroy();
         charts.monthWeight = new Chart(ctxWeight, {
@@ -406,32 +395,12 @@
             options: { 
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { 
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const d = filtered[context.dataIndex];
-                                if (context.datasetIndex === 0) {
-                                    return ` 體重: ${context.parsed.y} kg${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
-                                }
-                                return ` 7日平均: ${context.parsed.y} kg`;
-                            }
-                        }
-                    }
-                },
-                scales: { 
-                    y: { 
-                        min: minWeight,
-                        max: maxWeight 
-                    } 
-                }
+                plugins: { legend: { display: false } },
+                scales: { y: { min: minWeight, max: maxWeight } }
             }
         });
 
-        // ==========================================
-        // 圖表 2：身體組成 (FAT %, LBM, FAT kg)
-        // ==========================================
+        // 圖表 2：身體組成 (全部改為 7 日平均趨勢)
         const ctxComp = document.getElementById('monthCompChart').getContext('2d');
         if (charts.monthComp) charts.monthComp.destroy();
         charts.monthComp = new Chart(ctxComp, {
@@ -440,66 +409,29 @@
                 labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [
                     {
-                        label: '除脂體重 (LBM)',
-                        data: filtered.map(d => d.LBM ? parseFloat(d.LBM) : null),
-                        borderColor: '#7a9f8d', 
-                        backgroundColor: '#7a9f8d',
-                        borderWidth: 2,
-                        pointRadius: 1,
-                        yAxisID: 'y', 
-                        spanGaps: true
+                        label: 'LBM (平均)',
+                        data: filtered.map(d => d.lbmMa7),
+                        borderColor: '#7a9f8d', borderWidth: 2, pointRadius: 0, yAxisID: 'y', spanGaps: true
                     },
                     {
-                        label: '脂肪重 (FAT kg)',
-                        data: filtered.map(d => d['FAT kg'] ? parseFloat(d['FAT kg']) : null),
-                        borderColor: '#a68d85', 
-                        backgroundColor: '#a68d85',
-                        borderWidth: 2,
-                        pointRadius: 1,
-                        yAxisID: 'y', 
-                        spanGaps: true
+                        label: 'FAT kg (平均)',
+                        data: filtered.map(d => d.fatKgMa7),
+                        borderColor: '#a68d85', borderWidth: 2, pointRadius: 0, yAxisID: 'y', spanGaps: true
                     },
                     {
-                        label: '體脂率 (FAT %)',
-                        data: filtered.map(d => d['FAT %'] ? parseFloat(d['FAT %']) : null),
-                        borderColor: '#7a8d9f', 
-                        backgroundColor: '#7a8d9f',
-                        borderWidth: 2,
-                        borderDash: [5, 5], 
-                        pointRadius: 1,
-                        yAxisID: 'y1', 
-                        spanGaps: true
+                        label: '體脂率 (7日平均 %)',
+                        data: filtered.map(d => d.fatMa7),
+                        borderColor: '#7a8d9f', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, yAxisID: 'y1', spanGaps: true
                     }
                 ]
             },
             options: { 
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { 
-                    legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let unit = context.datasetIndex === 2 ? '%' : 'kg';
-                                return ` ${context.dataset.label}: ${context.parsed.y} ${unit}`;
-                            }
-                        }
-                    }
-                },
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } },
                 scales: { 
-                    y: { 
-                        type: 'linear', 
-                        display: true, 
-                        position: 'left',
-                        title: { display: true, text: '重量 (kg)', font: {size: 10} }
-                    },
-                    y1: { 
-                        type: 'linear', 
-                        display: true, 
-                        position: 'right',
-                        title: { display: true, text: '比例 (%)', font: {size: 10} },
-                        grid: { drawOnChartArea: false }
-                    }
+                    y: { type: 'linear', position: 'left', title: { display: true, text: '重量 (kg)' } },
+                    y1: { type: 'linear', position: 'right', title: { display: true, text: '比例 (%)' }, grid: { drawOnChartArea: false } }
                 }
             }
         });
