@@ -17,6 +17,9 @@
             --morandi-green: #7a9f8d;
             --border-color: #e8e8e8;
             --progress-bg: #eeeeee;
+            /* 新增單月最低紀錄的亮點背景色 */
+            --highlight-bg-rose: #f9f5f4;
+            --highlight-bg-green: #f4f7f5;
         }
 
         body {
@@ -76,6 +79,29 @@
         .stat-unit { font-size: 0.75rem; margin-left: 2px; }
         .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; height: 12px; }
 
+        /* 單月精選數據卡片樣式 */
+        .monthly-summary-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .summary-box {
+            padding: 15px 20px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(0,0,0,0.03);
+            transition: transform 0.2s ease-in-out;
+        }
+        .summary-box:hover { transform: translateY(-2px); }
+        .box-weight { background-color: var(--highlight-bg-rose); border-left: 4px solid var(--morandi-rose); }
+        .box-fat { background-color: var(--highlight-bg-green); border-left: 4px solid var(--morandi-green); }
+        .summary-label { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 6px; }
+        .summary-value { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
+        .summary-value.weight-color { color: var(--morandi-rose); }
+        .summary-value.fat-color { color: var(--morandi-green); }
+        .summary-date { font-size: 0.75rem; color: var(--text-sub); opacity: 0.8; }
+
         .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
         select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; cursor: pointer;}
 
@@ -103,6 +129,11 @@
             .card { padding: 20px; }
             .stat-value { font-size: 1.1rem; }
             .chart-container { height: 280px; }
+            
+            .monthly-summary-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
         }
     </style>
 </head>
@@ -162,6 +193,19 @@
     <div class="card">
         <div class="controls">
             <select id="monthSelect"></select>
+        </div>
+        
+        <div class="monthly-summary-row">
+            <div class="summary-box box-weight">
+                <div class="summary-label">⬇️ 本月最低體重</div>
+                <div id="min-month-weight" class="summary-value weight-color">-- <span class="stat-unit">kg</span></div>
+                <div id="min-month-weight-date" class="summary-date">日期: --</div>
+            </div>
+            <div class="summary-box box-fat">
+                <div class="summary-label">⬇️ 本月最低體脂</div>
+                <div id="min-month-fat" class="summary-value fat-color">-- <span class="stat-unit">%</span></div>
+                <div id="min-month-fat-date" class="summary-date">日期: --</div>
+            </div>
         </div>
         
         <h2>單月體重趨勢</h2>
@@ -364,6 +408,30 @@
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
+        // --- 核心邏輯：計算單月最低體重與最低體脂 ---
+        // 1. 單月最低體重
+        const validWeightEntries = filtered.filter(d => d.KG && !isNaN(parseFloat(d.KG)));
+        if (validWeightEntries.length > 0) {
+            const minWEntry = validWeightEntries.reduce((prev, curr) => parseFloat(curr.KG) < parseFloat(prev.KG) ? curr : prev);
+            document.getElementById('min-month-weight').innerHTML = `${parseFloat(minWEntry.KG).toFixed(1)}<span class="stat-unit">kg</span>`;
+            document.getElementById('min-month-weight-date').innerText = `日期: ${minWEntry.DATE.split('-').slice(1).join('/')}`;
+        } else {
+            document.getElementById('min-month-weight').innerHTML = `--<span class="stat-unit">kg</span>`;
+            document.getElementById('min-month-weight-date').innerText = `日期: --`;
+        }
+
+        // 2. 單月最低體脂
+        const validFatEntries = filtered.filter(d => d['FAT %'] && !isNaN(parseFloat(d['FAT %'])));
+        if (validFatEntries.length > 0) {
+            const minFEntry = validFatEntries.reduce((prev, curr) => parseFloat(curr['FAT %']) < parseFloat(prev['FAT %']) ? curr : prev);
+            document.getElementById('min-month-fat').innerHTML = `${parseFloat(minFEntry['FAT %']).toFixed(1)}<span class="stat-unit">%</span>`;
+            document.getElementById('min-month-fat-date').innerText = `日期: ${minFEntry.DATE.split('-').slice(1).join('/')}`;
+        } else {
+            document.getElementById('min-month-fat').innerHTML = `--<span class="stat-unit">%</span>`;
+            document.getElementById('min-month-fat-date').innerText = `日期: --`;
+        }
+        // ----------------------------------------
+
         const weights = filtered.map(d => parseFloat(d.KG)).filter(w => !isNaN(w));
         const minWeight = Math.floor(Math.min(...weights)) - 0.5;
         const maxWeight = Math.ceil(Math.max(...weights)) + 0.5;
@@ -449,8 +517,8 @@
                             usePointStyle: true, 
                             pointStyle: 'circle',
                             boxWidth: 6, 
-                            boxHeight: 6, // 強制指定圓點寬度，確保縮小
-                            padding: 40,        // 大幅增加間距，讓各項標籤拉開
+                            boxHeight: 6,
+                            padding: 40,        
                             font: { size: 12 }
                         } 
                     },
