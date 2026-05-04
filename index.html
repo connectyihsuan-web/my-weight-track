@@ -1,65 +1,574 @@
-function renderYTDChart() {
-    const ctx = document.getElementById('ytdChart').getContext('2d');
-    if (charts.ytd) charts.ytd.destroy();
-    
-    // 取得所有體重數據，用來在滑動時判斷顯示
-    const weightData = allData.map(d => d.KG);
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YH｜身體觀測站</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #faf9f6;
+            --card-bg: #ffffff;
+            --text-main: #2d2d2d; 
+            --text-sub: #555555;  
+            --morandi-blue: #7a8d9f; 
+            --morandi-rose: #a68d85; 
+            --morandi-green: #7a9f8d;
+            --border-color: #e8e8e8;
+            --progress-bg: #eeeeee;
+            /* 新增單月最低紀錄的亮點背景色 */
+            --highlight-bg-rose: #f9f5f4;
+            --highlight-bg-green: #f4f7f5;
+        }
 
-    charts.ytd = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
-            datasets: [{
-                data: weightData,
-                fill: true, 
-                tension: 0.4, 
-                borderWidth: 2, 
-                pointRadius: 0,        // 平時不顯示點
-                pointHoverRadius: 5,   // 滑鼠移過去時放大顯示點，方便對準
-                pointBackgroundColor: '#8e9fb1',
-                spanGaps: true,
-                segment: {
-                    borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
-                    backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.15)' : 'rgba(142, 159, 177, 0.05)',
-                }
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            // 關鍵修改：只要在該日期垂直區域滑動，就會自動抓取最近的點
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    enabled: true, // 確保提示框開啟
-                    backgroundColor: 'rgba(45, 45, 45, 0.85)', // 莫蘭迪深色背景
-                    titleColor: '#ffffff',
-                    bodyColor: '#ffffff',
-                    padding: 10,
-                    cornerRadius: 8,
-                    callbacks: {
-                        title: function(context) {
-                            return `日期: 2026-${context[0].label.replace('-', '/')}`;
-                        },
-                        label: function(context) {
-                            const d = allData[context.dataIndex];
-                            let label = ` 體重: ${context.parsed.y} kg`;
-                            if (d.備註) {
-                                label += ` | 📝 ${d.備註}`;
-                            }
-                            return label;
-                        }
-                    }
-                }
-            },
-            scales: { 
-                y: { beginAtZero: false, ticks: { font: { size: 10 } } },
-                x: { grid: { display: false }, ticks: { font: { size: 10 } } } 
+        body {
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-weight: 300; letter-spacing: 2px; color: var(--morandi-blue); margin-bottom: 5px; }
+        
+        .container { width: 100%; max-width: 1000px; }
+        
+        .progress-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            border: 1px solid var(--border-color);
+        }
+        .progress-label { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-end;
+            margin-bottom: 12px; 
+            font-size: 0.9rem; 
+            color: var(--text-sub); 
+        }
+        .progress-info { text-align: right; }
+        .predict-tag { color: var(--morandi-green); font-weight: 500; margin-left: 8px; }
+        
+        .progress-bar-bg { background: var(--progress-bg); height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
+        .progress-bar-fill { 
+            background: linear-gradient(90deg, var(--morandi-blue), var(--morandi-rose)); 
+            height: 100%; width: 0%; border-radius: 4px; transition: width 1s ease-out; 
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.02);
+            border: 1px solid var(--border-color);
+        }
+
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .stat-item { text-align: center; border-right: 1px solid var(--border-color); }
+        .stat-item:last-child { border-right: none; }
+        .stat-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 8px; }
+        .stat-value { font-size: 1.3rem; font-weight: 500; color: var(--morandi-blue); }
+        .stat-unit { font-size: 0.75rem; margin-left: 2px; }
+        .stat-subtext { font-size: 0.7rem; color: var(--text-sub); margin-top: 2px; height: 12px; }
+
+        /* 單月精選數據卡片樣式 */
+        .monthly-summary-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .summary-box {
+            padding: 15px 20px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(0,0,0,0.03);
+            transition: transform 0.2s ease-in-out;
+        }
+        .summary-box:hover { transform: translateY(-2px); }
+        .box-weight { background-color: var(--highlight-bg-rose); border-left: 4px solid var(--morandi-rose); }
+        .box-fat { background-color: var(--highlight-bg-green); border-left: 4px solid var(--morandi-green); }
+        .summary-label { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 6px; }
+        .summary-value { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
+        .summary-value.weight-color { color: var(--morandi-rose); }
+        .summary-value.fat-color { color: var(--morandi-green); }
+        .summary-date { font-size: 0.75rem; color: var(--text-sub); opacity: 0.8; }
+
+        .controls { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-end; }
+        select { border: 1px solid var(--border-color); background: var(--bg-color); padding: 5px 15px; border-radius: 10px; outline: none; cursor: pointer;}
+
+        h2 { font-weight: 400; font-size: 1.1rem; margin-bottom: 20px; color: var(--text-main); display: flex; align-items: center; }
+        h2::before { content: ""; width: 4px; height: 16px; background: var(--morandi-rose); margin-right: 10px; border-radius: 2px; }
+
+        .chart-container { position: relative; height: 320px; width: 100%; margin-bottom: 30px;}
+        .chart-container:last-child { margin-bottom: 0; }
+
+        @media (max-width: 600px) {
+            body { padding: 20px 15px; }
+            .header h1 { font-size: 1.5rem; }
+            .stats-row { 
+                grid-template-columns: 1fr 1fr; 
+                gap: 20px 0; 
+            }
+            .stat-item {
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 15px;
+            }
+            .stat-item:nth-child(even) { border-left: 1px solid var(--border-color); }
+            .stat-item:nth-last-child(-n+2) { border-bottom: none; padding-bottom: 0; }
+            
+            .card { padding: 20px; }
+            .stat-value { font-size: 1.1rem; }
+            .chart-container { height: 280px; }
+            
+            .monthly-summary-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
             }
         }
-    });
-}
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Yi Hsuan Chasing Lines</h1>
+    <p>捕捉日復一日的細微變化</p>
+</div>
+
+<div class="container">
+    <div class="progress-card">
+        <div class="progress-label">
+            <span>減重進度 <strong id="progress-percent">0%</strong></span>
+            <div class="progress-info">
+                預計達標 <span id="predict-date-top" class="predict-tag">--/--</span>
+                <span id="days-left-top" style="font-size: 0.75rem;">(--天)</span>
+            </div>
+        </div>
+        <div class="progress-bar-bg">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="stats-row">
+            <div class="stat-item">
+                <div class="stat-label">今日體重</div>
+                <div id="cur-kg" class="stat-value">--</div>
+                <div class="stat-subtext"></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">體脂率</div>
+                <div id="cur-fat" class="stat-value">--</div>
+                <div id="fat-change" class="stat-subtext">--</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">體重變化</div>
+                <div id="day-diff" class="stat-value">--</div>
+                <div class="stat-subtext">較前次紀錄</div>
+            </div>
+            <div class="stat-item">
+                <div id="target-label" class="stat-label">目標距離</div>
+                <div id="target-dist" class="stat-value" style="color: var(--morandi-rose);">--</div>
+                <div class="stat-subtext"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>YTD 年度趨勢</h2>
+        <div class="chart-container">
+            <canvas id="ytdChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="controls">
+            <select id="monthSelect"></select>
+        </div>
+        
+        <div class="monthly-summary-row">
+            <div class="summary-box box-weight">
+                <div class="summary-label">⬇️ 本月最低體重</div>
+                <div id="min-month-weight" class="summary-value weight-color">-- <span class="stat-unit">kg</span></div>
+                <div id="min-month-weight-date" class="summary-date">日期: --</div>
+            </div>
+            <div class="summary-box box-fat">
+                <div class="summary-label">⬇️ 本月最低體脂</div>
+                <div id="min-month-fat" class="summary-value fat-color">-- <span class="stat-unit">%</span></div>
+                <div id="min-month-fat-date" class="summary-date">日期: --</div>
+            </div>
+        </div>
+        
+        <h2>單月體重趨勢</h2>
+        <div class="chart-container">
+            <canvas id="monthWeightChart"></canvas>
+        </div>
+        
+        <h2 style="margin-top: 40px;">單月身體組成</h2>
+        <div class="chart-container">
+            <canvas id="monthCompChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    const weightUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?output=csv';
+    const targetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR7CbjqPmF9IMhzqnL1aBKXVLlYDBvvlE-M0vd0v8opsVR5bAlSmlhKWhZdfk7wWQWn3BRdJkDDzAbq/pub?gid=2139827519&single=true&output=csv';
+    
+    const FINAL_TARGET = 55.0; 
+    let allData = [];
+    let monthlyTargets = [];
+    let charts = {};
+
+    function parseCsv(url) {
+        return new Promise((resolve, reject) => {
+            Papa.parse(url, {
+                download: true, header: true,
+                complete: (results) => resolve(results.data),
+                error: (error) => reject(error)
+            });
+        });
+    }
+
+    async function init() {
+        try {
+            const [weightRaw, targetRaw] = await Promise.all([
+                parseCsv(weightUrl),
+                parseCsv(targetUrl)
+            ]);
+
+            allData = weightRaw.filter(row => row.DATE && row.KG && !isNaN(parseFloat(row.KG)));
+            monthlyTargets = targetRaw.filter(row => row.MONTH && row.TARGET_KG).map(row => ({
+                month: parseInt(row.MONTH),
+                target: parseFloat(row.TARGET_KG)
+            }));
+
+            const ma7Values = getMovingAverage(allData, 7);
+            allData.forEach((d, i) => { d.ma7 = ma7Values[i]; });
+
+            setupMonthSelector();
+            renderAll();
+        } catch (err) { console.error("資料讀取失敗:", err); }
+    }
+
+    function getMonthlyTarget() {
+        const currentMonth = new Date().getMonth() + 1;
+        const found = monthlyTargets.find(t => t.month === currentMonth);
+        return found ? found.target : FINAL_TARGET;
+    }
+
+    function renderAll() {
+        if (allData.length === 0) return;
+
+        const first = allData[0];
+        const latest = allData[allData.length - 1];
+        const prev = allData.length > 1 ? allData[allData.length - 2] : latest;
+        
+        const startKg = parseFloat(first.KG);
+        const currentKg = parseFloat(latest.KG);
+        const prevKg = parseFloat(prev.KG);
+        const monthlyTarget = getMonthlyTarget();
+
+        document.getElementById('cur-kg').innerHTML = `${currentKg}<span class="stat-unit">kg</span>`;
+        
+        const currentFat = parseFloat(latest['FAT %']);
+        const prevFat = parseFloat(prev['FAT %']);
+        const fatStatus = document.getElementById('fat-change');
+
+        if (!isNaN(currentFat)) {
+            document.getElementById('cur-fat').innerHTML = `${currentFat.toFixed(1)}<span class="stat-unit">%</span>`;
+            
+            if (!isNaN(prevFat)) {
+                const fatDiff = (currentFat - prevFat).toFixed(1);
+                if (fatDiff > 0) {
+                    fatStatus.innerText = `↑ ${fatDiff}%`;
+                    fatStatus.style.color = "var(--morandi-rose)";
+                } else if (fatDiff < 0) {
+                    fatStatus.innerText = `↓ ${Math.abs(fatDiff)}%`;
+                    fatStatus.style.color = "var(--morandi-green)";
+                } else {
+                    fatStatus.innerText = "持平";
+                    fatStatus.style.color = "var(--morandi-blue)";
+                }
+            } else { fatStatus.innerText = ""; }
+        } else {
+            document.getElementById('cur-fat').innerHTML = `--<span class="stat-unit">%</span>`;
+            fatStatus.innerText = "";
+        }
+
+        const dayDiff = (currentKg - prevKg).toFixed(1);
+        const dayDiffElem = document.getElementById('day-diff');
+        const arrow = dayDiff > 0 ? "↑" : (dayDiff < 0 ? "↓" : "─");
+        dayDiffElem.innerHTML = `${arrow} ${Math.abs(dayDiff)}<span class="stat-unit">kg</span>`;
+        dayDiffElem.style.color = dayDiff > 0 ? "var(--morandi-rose)" : (dayDiff < 0 ? "var(--morandi-green)" : "var(--morandi-blue)");
+
+        const dist = (currentKg - monthlyTarget).toFixed(1);
+        document.getElementById('target-label').innerText = `${new Date().getMonth() + 1}月目標距離`;
+        document.getElementById('target-dist').innerHTML = `${dist}<span class="stat-unit">kg</span>`;
+
+        const windowSize = 7;
+        if (allData.length > windowSize) {
+            const currentMA = parseFloat(latest.ma7);
+            const pastMA = parseFloat(allData[allData.length - windowSize - 1].ma7);
+            const weeklyLoss = pastMA - currentMA; 
+
+            if (weeklyLoss > 0.05) { 
+                const dailyLoss = weeklyLoss / 7;
+                const remainingKg = currentKg - FINAL_TARGET;
+                const daysToTarget = Math.ceil(remainingKg / dailyLoss);
+                const targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + daysToTarget);
+                
+                document.getElementById('predict-date-top').innerText = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
+                document.getElementById('days-left-top').innerText = `(約 ${daysToTarget} 天)`;
+            } else {
+                document.getElementById('predict-date-top').innerText = "觀察中";
+                document.getElementById('days-left-top').innerText = "(穩定維持中)";
+            }
+        }
+
+        const progress = Math.max(0, Math.min(100, ((startKg - currentKg) / (startKg - FINAL_TARGET)) * 100));
+        document.getElementById('progress-percent').innerText = progress.toFixed(1) + "%";
+        setTimeout(() => {
+            document.getElementById('progress-fill').style.width = progress + "%";
+        }, 100);
+
+        renderYTDChart();
+        renderMonthTrend(document.getElementById('monthSelect').value);
+    }
+
+    function getMovingAverage(dataArray, windowSize = 7) {
+        return dataArray.map((val, index, arr) => {
+            if (index < windowSize - 1) return null;
+            const slice = arr.slice(index - windowSize + 1, index + 1);
+            const sum = slice.reduce((acc, curr) => acc + parseFloat(curr.KG), 0);
+            return (sum / windowSize).toFixed(2);
+        });
+    }
+
+    function setupMonthSelector() {
+        const selector = document.getElementById('monthSelect');
+        const months = ["1-2月"];
+        const others = [...new Set(allData.map(d => {
+            const m = parseInt(d.DATE.split('-')[1]);
+            return m > 2 ? m + "月" : null;
+        }))].filter(m => m !== null).sort((a,b) => parseInt(a)-parseInt(b));
+        
+        [...months, ...others].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; opt.innerText = m;
+            selector.appendChild(opt);
+        });
+        selector.value = others.length > 0 ? others[others.length-1] : "1-2月";
+        selector.addEventListener('change', () => renderMonthTrend(selector.value));
+    }
+
+    function isPeriodPoint(d) { return d && d.備註 && d.備註.includes('生理期'); }
+    function segmentIsPeriod(ctx, dataArray) { return isPeriodPoint(dataArray[ctx.p0DataIndex]) || isPeriodPoint(dataArray[ctx.p1DataIndex]); }
+
+    function renderYTDChart() {
+        const ctx = document.getElementById('ytdChart').getContext('2d');
+        if (charts.ytd) charts.ytd.destroy();
+
+        const weightData = allData.map(d => parseFloat(d.KG));
+
+        charts.ytd = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
+                datasets: [{
+                    data: weightData,
+                    fill: true, tension: 0.4, borderWidth: 2, 
+                    pointRadius: 0,        // 平時隱藏點
+                    pointHoverRadius: 5,   // 滑鼠滑過時放大圓點方便對準
+                    pointBackgroundColor: '#8e9fb1',
+                    spanGaps: true,
+                    segment: {
+                        borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
+                        backgroundColor: ctx => segmentIsPeriod(ctx, allData) ? 'rgba(158, 130, 122, 0.15)' : 'rgba(142, 159, 177, 0.05)',
+                    }
+                }]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false,
+                // 滑鼠移到該日期的垂直範圍即可觸發，不必精準對齊曲線點
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(45, 45, 45, 0.85)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            title: function(context) {
+                                return `日期: ${context[0].label.replace('-', '/')}`;
+                            },
+                            label: function(context) {
+                                const d = allData[context.dataIndex];
+                                let label = ` 體重: ${context.parsed.y} kg`;
+                                if (d.備註) {
+                                    label += ` | 📝 ${d.備註}`;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: { 
+                    y: { beginAtZero: false, ticks: { font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } } 
+                }
+            }
+        });
+    }
+
+    function renderMonthTrend(selected) {
+        let filtered = (selected === "1-2月") 
+            ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
+            : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
+
+        // 1. 計算單月最低體重
+        const validWeightEntries = filtered.filter(d => d.KG && !isNaN(parseFloat(d.KG)));
+        if (validWeightEntries.length > 0) {
+            const minWEntry = validWeightEntries.reduce((prev, curr) => parseFloat(curr.KG) < parseFloat(prev.KG) ? curr : prev);
+            document.getElementById('min-month-weight').innerHTML = `${parseFloat(minWEntry.KG).toFixed(1)}<span class="stat-unit">kg</span>`;
+            document.getElementById('min-month-weight-date').innerText = `日期: ${minWEntry.DATE.split('-').slice(1).join('/')}`;
+        } else {
+            document.getElementById('min-month-weight').innerHTML = `--<span class="stat-unit">kg</span>`;
+            document.getElementById('min-month-weight-date').innerText = `日期: --`;
+        }
+
+        // 2. 計算單月最低體脂
+        const validFatEntries = filtered.filter(d => d['FAT %'] && !isNaN(parseFloat(d['FAT %'])));
+        if (validFatEntries.length > 0) {
+            const minFEntry = validFatEntries.reduce((prev, curr) => parseFloat(curr['FAT %']) < parseFloat(prev['FAT %']) ? curr : prev);
+            document.getElementById('min-month-fat').innerHTML = `${parseFloat(minFEntry['FAT %']).toFixed(1)}<span class="stat-unit">%</span>`;
+            document.getElementById('min-month-fat-date').innerText = `日期: ${minFEntry.DATE.split('-').slice(1).join('/')}`;
+        } else {
+            document.getElementById('min-month-fat').innerHTML = `--<span class="stat-unit">%</span>`;
+            document.getElementById('min-month-fat-date').innerText = `日期: --`;
+        }
+
+        const weights = filtered.map(d => parseFloat(d.KG)).filter(w => !isNaN(w));
+        const minWeight = Math.floor(Math.min(...weights)) - 0.5;
+        const maxWeight = Math.ceil(Math.max(...weights)) + 0.5;
+
+        const ctxWeight = document.getElementById('monthWeightChart').getContext('2d');
+        if (charts.monthWeight) charts.monthWeight.destroy();
+        charts.monthWeight = new Chart(ctxWeight, {
+            type: 'line',
+            data: {
+                labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
+                datasets: [
+                    {
+                        label: '體重',
+                        data: filtered.map(d => d.KG),
+                        spanGaps: true,
+                        tension: 0.3, borderWidth: 2.5, pointRadius: 3,
+                        pointBackgroundColor: filtered.map(d => isPeriodPoint(d) ? '#9e827a' : '#bda69e'),
+                        segment: { borderColor: ctx => segmentIsPeriod(ctx, filtered) ? '#9e827a' : '#bda69e' }
+                    },
+                    {
+                        label: '7日平均',
+                        data: filtered.map(d => d.ma7),
+                        spanGaps: true,
+                        borderColor: 'rgba(122, 141, 159, 0.4)', borderDash: [5, 5], pointRadius: 0, fill: false
+                    }
+                ]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const d = filtered[context.dataIndex];
+                                if (context.datasetIndex === 0) {
+                                    return ` 體重: ${context.parsed.y} kg${d.備註 ? ' | 📝 ' + d.備註 : ''}`;
+                                }
+                                return ` 7日平均: ${context.parsed.y} kg`;
+                            }
+                        }
+                    }
+                },
+                scales: { y: { min: minWeight, max: maxWeight } }
+            }
+        });
+
+        const ctxComp = document.getElementById('monthCompChart').getContext('2d');
+        if (charts.monthComp) charts.monthComp.destroy();
+        charts.monthComp = new Chart(ctxComp, {
+            type: 'line',
+            data: {
+                labels: filtered.map(d => d.DATE.split('-').slice(1).join('-')),
+                datasets: [
+                    {
+                        label: '除脂體重 (LBM)',
+                        data: filtered.map(d => d.LBM ? parseFloat(d.LBM) : null),
+                        borderColor: '#7a9f8d', backgroundColor: '#7a9f8d',
+                        borderWidth: 2, pointRadius: 1, yAxisID: 'y', spanGaps: true
+                    },
+                    {
+                        label: '脂肪重 (FAT kg)',
+                        data: filtered.map(d => d['FAT kg'] ? parseFloat(d['FAT kg']) : null),
+                        borderColor: '#a68d85', backgroundColor: '#a68d85',
+                        borderWidth: 2, pointRadius: 1, yAxisID: 'y', spanGaps: true
+                    },
+                    {
+                        label: '體脂率 (FAT %)',
+                        data: filtered.map(d => d['FAT %'] ? parseFloat(d['FAT %']) : null),
+                        borderColor: '#7a8d9f', backgroundColor: '#7a8d9f',
+                        borderWidth: 2, borderDash: [5, 5], pointRadius: 1, yAxisID: 'y1', spanGaps: true
+                    }
+                ]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { 
+                        position: 'bottom', 
+                        labels: { 
+                            usePointStyle: true, 
+                            pointStyle: 'circle',
+                            boxWidth: 6, 
+                            boxHeight: 6,
+                            padding: 40,        
+                            font: { size: 12 }
+                        } 
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let unit = context.datasetIndex === 2 ? '%' : 'kg';
+                                return ` ${context.dataset.label}: ${context.parsed.y} ${unit}`;
+                            }
+                        }
+                    }
+                },
+                scales: { 
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '重量 (kg)', font: {size: 10} } },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '比例 (%)', font: {size: 10} }, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+    }
+
+    init();
+</script>
+</body>
+</html>
