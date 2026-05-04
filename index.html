@@ -378,19 +378,13 @@
     function renderYTDChart() {
         const ctx = document.getElementById('ytdChart').getContext('2d');
         if (charts.ytd) charts.ytd.destroy();
-
-        const weightData = allData.map(d => parseFloat(d.KG));
-
         charts.ytd = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: allData.map(d => d.DATE.split('-').slice(1).join('-')),
                 datasets: [{
-                    data: weightData,
-                    fill: true, tension: 0.4, borderWidth: 2, 
-                    pointRadius: 0,        // 平時隱藏點
-                    pointHoverRadius: 5,   // 滑鼠滑過時放大圓點方便對準
-                    pointBackgroundColor: '#8e9fb1',
+                    data: allData.map(d => d.KG),
+                    fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0,
                     spanGaps: true,
                     segment: {
                         borderColor: ctx => segmentIsPeriod(ctx, allData) ? '#9e827a' : '#8e9fb1',
@@ -400,32 +394,7 @@
             },
             options: { 
                 responsive: true, maintainAspectRatio: false,
-                // 滑鼠移到該日期的垂直範圍即可觸發，不必精準對齊曲線點
-                interaction: { mode: 'index', intersect: false },
-                plugins: { 
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: 'rgba(45, 45, 45, 0.85)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        padding: 10,
-                        cornerRadius: 8,
-                        callbacks: {
-                            title: function(context) {
-                                return `日期: ${context[0].label.replace('-', '/')}`;
-                            },
-                            label: function(context) {
-                                const d = allData[context.dataIndex];
-                                let label = ` 體重: ${context.parsed.y} kg`;
-                                if (d.備註) {
-                                    label += ` | 📝 ${d.備註}`;
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
+                plugins: { legend: { display: false } },
                 scales: { 
                     y: { beginAtZero: false, ticks: { font: { size: 10 } } },
                     x: { grid: { display: false }, ticks: { font: { size: 10 } } } 
@@ -439,7 +408,8 @@
             ? allData.filter(d => [1,2].includes(parseInt(d.DATE.split('-')[1])))
             : allData.filter(d => parseInt(d.DATE.split('-')[1]) === parseInt(selected));
 
-        // 1. 計算單月最低體重
+        // --- 核心邏輯：計算單月最低體重與最低體脂 ---
+        // 1. 單月最低體重
         const validWeightEntries = filtered.filter(d => d.KG && !isNaN(parseFloat(d.KG)));
         if (validWeightEntries.length > 0) {
             const minWEntry = validWeightEntries.reduce((prev, curr) => parseFloat(curr.KG) < parseFloat(prev.KG) ? curr : prev);
@@ -450,7 +420,7 @@
             document.getElementById('min-month-weight-date').innerText = `日期: --`;
         }
 
-        // 2. 計算單月最低體脂
+        // 2. 單月最低體脂
         const validFatEntries = filtered.filter(d => d['FAT %'] && !isNaN(parseFloat(d['FAT %'])));
         if (validFatEntries.length > 0) {
             const minFEntry = validFatEntries.reduce((prev, curr) => parseFloat(curr['FAT %']) < parseFloat(prev['FAT %']) ? curr : prev);
@@ -460,6 +430,7 @@
             document.getElementById('min-month-fat').innerHTML = `--<span class="stat-unit">%</span>`;
             document.getElementById('min-month-fat-date').innerText = `日期: --`;
         }
+        // ----------------------------------------
 
         const weights = filtered.map(d => parseFloat(d.KG)).filter(w => !isNaN(w));
         const minWeight = Math.floor(Math.min(...weights)) - 0.5;
